@@ -64,8 +64,9 @@ struct ContentView: View {
                     .focused($inputFocused)
                 if viewModel.inputText.isEmpty {
                     Text("Type or paste text to translate…")
+                        .font(.body)
                         .foregroundColor(.secondary)
-                        .padding(.horizontal, 10).padding(.vertical, 12)
+                        .padding(.horizontal, 10).padding(.top, 5)
                         .allowsHitTesting(false)
                 }
             }
