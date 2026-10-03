@@ -6,7 +6,6 @@ struct ContentView: View {
     @FocusState private var inputFocused: Bool
     @State private var showingSettings = false
     @State private var showCopyFeedback = false
-    @State private var showSaveDefaultsFeedback = false
 
     private var isBusy: Bool { viewModel.isTranslating || viewModel.isSelectingArea }
 
@@ -30,7 +29,12 @@ struct ContentView: View {
                         }
                     }.labelsHidden()
                 }
-                Image(systemName: "arrow.right").foregroundColor(.secondary)
+                Button { viewModel.swapLanguages() } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                }
+                .buttonStyle(.borderless)
+                .help("Swap languages")
+                .accessibilityLabel("Swap languages")
                 VStack(alignment: .leading, spacing: 4) {
                     Text("To").font(.caption).foregroundColor(.secondary)
                     Picker("Target language", selection: $viewModel.targetLanguage) {
@@ -41,18 +45,6 @@ struct ContentView: View {
                 }
             }
             .disabled(isBusy)
-            HStack {
-                Button("Set as Default") {
-                    viewModel.saveLanguagePreferences()
-                    showSaveDefaultsFeedback = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        showSaveDefaultsFeedback = false
-                    }
-                }
-                .disabled(isBusy || viewModel.sourceLanguage == viewModel.targetLanguage)
-                .font(.caption)
-                if showSaveDefaultsFeedback { Text("Saved!").font(.caption).foregroundColor(.green) }
-            }
             Text("Original text").font(.headline)
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $viewModel.inputText)

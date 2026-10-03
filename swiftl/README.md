@@ -12,6 +12,7 @@ A macOS menu bar app for typed or pasted text translation and screenshot OCR tra
 - Select any area of the screen to capture text (similar to CMD+Shift+4)
 - Automatically detects and extracts text from the selected area
 - Translate text between multiple languages
+- Language selections are remembered automatically; use the button between From and To to swap them
 - Simple, lightweight, and intuitive interface
 
 ## Requirements
@@ -72,7 +73,7 @@ bash swiftl/scripts/check.sh --live
 
 Checks cover input validation, duplicate submission, parameter encoding,
 segmented responses, malformed data, network errors, retry, clearing,
-screenshot cancellation, and default language persistence. They use an isolated
+screenshot cancellation, and automatic language persistence. They use an isolated
 preferences suite and do not modify your saved languages. Text history is kept
 only in memory while the app is running.
 

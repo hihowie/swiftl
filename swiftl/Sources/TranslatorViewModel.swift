@@ -10,8 +10,12 @@ struct Language: Equatable, Hashable {
 }
 
 class TranslatorViewModel: ObservableObject {
-    @Published var sourceLanguage: Language
-    @Published var targetLanguage: Language
+    @Published var sourceLanguage: Language {
+        didSet { if shouldSaveLanguagePreferences { saveLanguagePreferences() } }
+    }
+    @Published var targetLanguage: Language {
+        didSet { if shouldSaveLanguagePreferences { saveLanguagePreferences() } }
+    }
     @Published var inputText: String = ""
     @Published var translatedText: String = ""
     @Published var isTranslating: Bool = false
@@ -48,6 +52,7 @@ class TranslatorViewModel: ObservableObject {
     
     private let session: URLSession
     private let preferences: UserDefaults
+    private var shouldSaveLanguagePreferences = false
 
     init(session: URLSession = .shared, preferences: UserDefaults = .standard) {
         self.session = session
@@ -64,6 +69,7 @@ class TranslatorViewModel: ObservableObject {
         
         // Load saved language preferences
         loadLanguagePreferences()
+        shouldSaveLanguagePreferences = true
     }
     
     // Save DeepL API key to Keychain
@@ -132,7 +138,7 @@ class TranslatorViewModel: ObservableObject {
     }
     
     // Save default language preferences to UserDefaults
-    func saveLanguagePreferences() {
+    private func saveLanguagePreferences() {
         let defaults = preferences
         defaults.set(sourceLanguage.code, forKey: "DefaultSourceLanguageCode")
         defaults.set(targetLanguage.code, forKey: "DefaultTargetLanguageCode")
@@ -154,6 +160,13 @@ class TranslatorViewModel: ObservableObject {
         }
     }
     
+    func swapLanguages() {
+        guard !isTranslating, !isSelectingArea else { return }
+        let previousSource = sourceLanguage
+        sourceLanguage = targetLanguage
+        targetLanguage = previousSource
+    }
+
     var canTranslate: Bool {
         !isTranslating && !isSelectingArea && sourceLanguage != targetLanguage
     }

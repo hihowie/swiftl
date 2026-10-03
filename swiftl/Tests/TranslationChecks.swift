@@ -73,9 +73,15 @@ final class TranslationProtocol: URLProtocol {
         let query = URLComponents(url: TranslationProtocol.requests[0].url!, resolvingAgainstBaseURL: false)!.queryItems!
         check(query.first(where: { $0.name == "q" })?.value == original, "special characters and paragraphs round-trip")
         check(!query.contains(where: { $0.name == "tk" }), "no random token")
-        model.saveLanguagePreferences()
         let reloaded = TranslatorViewModel(session: session, preferences: prefs)
-        check(reloaded.sourceLanguage == model.sourceLanguage && reloaded.targetLanguage == model.targetLanguage, "default languages reload")
+        check(reloaded.sourceLanguage == model.sourceLanguage && reloaded.targetLanguage == model.targetLanguage, "language selections automatically reload")
+        let previousSource = model.sourceLanguage
+        let previousTarget = model.targetLanguage
+        model.swapLanguages()
+        check(model.sourceLanguage == previousTarget && model.targetLanguage == previousSource, "swap exchanges source and target")
+        let swapped = TranslatorViewModel(session: session, preferences: prefs)
+        check(swapped.sourceLanguage == previousTarget && swapped.targetLanguage == previousSource, "swapped languages automatically reload")
+        model.swapLanguages()
         for invalid in ["[]", "[[[]]]", "not json"] {
             TranslationProtocol.responseData = Data(invalid.utf8)
             model.translateInput(); wait(model)
