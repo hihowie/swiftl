@@ -20,7 +20,7 @@ class FloatingPanel: NSPanel {
     
     init(contentRect: NSRect, backing: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect,
-                  styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
+                  styleMask: [.titled, .closable, .nonactivatingPanel],
                   backing: backing,
                   defer: flag)
         
@@ -89,11 +89,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create the SwiftUI view that provides the window contents
         let contentView = ContentView().environmentObject(viewModel)
         let hostingView = NSHostingView(rootView: contentView)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 400)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 400, height: 600)
         
         // Create the floating panel
         let panel = FloatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 600),
             backing: .buffered,
             defer: false
         )
@@ -130,6 +130,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         self.statusItem = statusItem
+        showPanel(nil)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPanel(nil)
+        return true
     }
     
     @objc func togglePanel(_ sender: NSStatusBarButton) {

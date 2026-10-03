@@ -104,6 +104,20 @@ class AreaSelectionWindow: NSWindow {
         } else {
             // Close without processing
             self.orderOut(nil)
+            viewModel?.cancelAreaSelection()
+        }
+    }
+
+    override var canBecomeKey: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            NSCursor.pop()
+            orderOut(nil)
+            NSApp.unhide(nil)
+            viewModel?.cancelAreaSelection()
+        } else {
+            super.keyDown(with: event)
         }
     }
 }

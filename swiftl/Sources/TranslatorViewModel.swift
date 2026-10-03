@@ -12,6 +12,7 @@ struct Language: Equatable, Hashable {
 class TranslatorViewModel: ObservableObject {
     @Published var sourceLanguage: Language
     @Published var targetLanguage: Language
+    @Published var inputText: String = ""
     @Published var translatedText: String = ""
     @Published var isTranslating: Bool = false
     @Published var errorMessage: String? = nil
@@ -45,7 +46,12 @@ class TranslatorViewModel: ObservableObject {
     // Window controller to manage the selection window's lifecycle
     private var windowController: NSWindowController?
     
-    init() {
+    private let session: URLSession
+    private let preferences: UserDefaults
+
+    init(session: URLSession = .shared, preferences: UserDefaults = .standard) {
+        self.session = session
+        self.preferences = preferences
         // Default to Japanese and English, but will be overridden by saved preferences if they exist
         self.sourceLanguage = availableLanguages[8] // Default to Japanese
         self.targetLanguage = availableLanguages[0] // Default to English
@@ -127,14 +133,14 @@ class TranslatorViewModel: ObservableObject {
     
     // Save default language preferences to UserDefaults
     func saveLanguagePreferences() {
-        let defaults = UserDefaults.standard
+        let defaults = preferences
         defaults.set(sourceLanguage.code, forKey: "DefaultSourceLanguageCode")
         defaults.set(targetLanguage.code, forKey: "DefaultTargetLanguageCode")
     }
     
     // Load default language preferences from UserDefaults
     private func loadLanguagePreferences() {
-        let defaults = UserDefaults.standard
+        let defaults = preferences
         
         if let sourceCode = defaults.string(forKey: "DefaultSourceLanguageCode"),
            let targetCode = defaults.string(forKey: "DefaultTargetLanguageCode") {
@@ -148,10 +154,45 @@ class TranslatorViewModel: ObservableObject {
         }
     }
     
+    var canTranslate: Bool {
+        !isTranslating && !isSelectingArea && sourceLanguage != targetLanguage
+    }
+
+    func translateInput() {
+        guard canTranslate, !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        isTranslating = true
+        translatedText = ""
+        errorMessage = nil
+        translateText(inputText) { [weak self] result in
+            self?.finishTranslation(result)
+        }
+    }
+
+    func clearInput() {
+        guard !isTranslating, !isSelectingArea else { return }
+        inputText = ""
+        translatedText = ""
+        errorMessage = nil
+    }
+
+    private func finishTranslation(_ result: String?) {
+        isTranslating = false
+        if let result = result {
+            translatedText = result
+        } else if errorMessage == nil {
+            errorMessage = "Translation failed. Check your connection and try again."
+        }
+    }
+
+    func cancelAreaSelection() {
+        isSelectingArea = false
+        windowController = nil
+    }
+
     func startAreaSelection() {
-        // Make sure we're on the main thread
+        guard canTranslate else { return }
+        isSelectingArea = true
         DispatchQueue.main.async {
-            self.isSelectingArea = true
             
             // If there's an existing window controller, close it
             if let windowController = self.windowController {
@@ -181,16 +222,14 @@ class TranslatorViewModel: ObservableObject {
     }
     
     func processSelectedArea(rect: NSRect) {
-        // Release the window controller reference
+        guard !isTranslating else { return }
+        windowController = nil
+        isSelectingArea = false
+        isTranslating = true
+        errorMessage = nil
+        translatedText = ""
+
         DispatchQueue.main.async {
-            self.windowController = nil
-            self.isSelectingArea = false
-        }
-        
-        DispatchQueue.main.async {
-            self.isTranslating = true
-            self.errorMessage = nil
-            self.translatedText = ""
             
             // Show the app and its panel
             NSApp.unhide(nil)
@@ -217,22 +256,12 @@ class TranslatorViewModel: ObservableObject {
             recognizeText(in: image) { [weak self] recognizedText in
                 guard let self = self else { return }
                 
-                if let text = recognizedText, !text.isEmpty {
-                    
-                    
-                    // Translate the text
-                    self.translateText(text) { translatedText in
-                        DispatchQueue.main.async {
-                            self.isTranslating = false
-                            if let translatedText = translatedText {
-                                self.translatedText = translatedText
-                            } else {
-                                self.errorMessage = "Translation failed. Please check your network connection or try a different language pair."
-                            }
+                DispatchQueue.main.async {
+                    if let text = recognizedText, !text.isEmpty {
+                        self.translateText(text) { result in
+                            self.finishTranslation(result)
                         }
-                    }
-                } else {
-                    DispatchQueue.main.async {
+                    } else {
                         self.isTranslating = false
                         self.errorMessage = "No text was recognized in the selected area."
                     }
@@ -398,50 +427,19 @@ class TranslatorViewModel: ObservableObject {
     }
     
     private func translateWithDeepL(_ text: String, completion: @escaping (String?) -> Void) {
-        // Create a proper URL-encoded string for the text
-        guard let encodedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            
-            DispatchQueue.main.async {
-                self.errorMessage = "Failed to encode text for translation"
-                completion(nil)
-            }
-            return
-        }
-        
-        // Convert language codes for DeepL if needed
         let from = convertToDeepLLanguageCode(sourceLanguage.code)
         let to = convertToDeepLLanguageCode(targetLanguage.code)
-        
-        // Build the URL for DeepL API
-        let urlString = "https://api-free.deepl.com/v2/translate"
-        
-        guard let url = URL(string: urlString) else {
-            
-            DispatchQueue.main.async {
-                self.errorMessage = "Failed to create API URL"
-                completion(nil)
-            }
-            return
-        }
-        
-        
-        
-        // Create the request body
-        var requestBody = "text=\(encodedText)"
-        requestBody += "&source_lang=\(from)"
-        requestBody += "&target_lang=\(to)"
-        
-        // Create and configure the request
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: URL(string: "https://api-free.deepl.com/v2/translate")!)
         request.httpMethod = "POST"
-        request.httpBody = requestBody.data(using: .utf8)
-        
-        // Set headers for DeepL API
-        request.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.addValue("DeepL-Auth-Key \(deepLApiKey)", forHTTPHeaderField: "Authorization")
-        
+        request.timeoutInterval = 30
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "text": [text], "source_lang": from, "target_lang": to
+        ])
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("DeepL-Auth-Key \(deepLApiKey)", forHTTPHeaderField: "Authorization")
+
         // Make the request
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
             
             if let error = error {
@@ -472,11 +470,6 @@ class TranslatorViewModel: ObservableObject {
                     completion(nil)
                 }
                 return
-            }
-            
-            // Print raw response for debugging
-            if let responseString = String(data: data, encoding: .utf8) {
-                
             }
             
             do {
@@ -540,47 +533,27 @@ class TranslatorViewModel: ObservableObject {
     }
     
     private func translateWithGoogleTranslate(_ text: String, completion: @escaping (String?) -> Void) {
-        // Create a proper URL-encoded string for the text
-        guard let encodedText = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            
-            DispatchQueue.main.async {
-                self.errorMessage = "Failed to encode text for translation"
-                completion(nil)
-            }
+        var components = URLComponents(string: "https://translate.googleapis.com/translate_a/single")!
+        components.queryItems = [
+            URLQueryItem(name: "client", value: "gtx"),
+            URLQueryItem(name: "sl", value: sourceLanguage.code),
+            URLQueryItem(name: "tl", value: targetLanguage.code),
+            URLQueryItem(name: "dt", value: "t"),
+            URLQueryItem(name: "q", value: text)
+        ]
+        // Some servers decode query strings as form data, where a literal + means space.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        guard let url = components.url else {
+            errorMessage = "Couldn't create the translation request."
+            completion(nil)
             return
         }
-        
-        // Use source and target language codes
-        let from = sourceLanguage.code
-        let to = targetLanguage.code
-        
-        // Generate a semi-random token for the request (mimicking browser behavior)
-        let randomToken = Int.random(in: 100000...10000000)
-        
-        // Build the URL with the format used by free Google Translate
-        let urlString = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=\(from)&tl=\(to)&dt=t&q=\(encodedText)&tk=\(randomToken)"
-        
-        guard let url = URL(string: urlString) else {
-            
-            DispatchQueue.main.async {
-                self.errorMessage = "Failed to create API URL"
-                completion(nil)
-            }
-            return
-        }
-        
-        
-        
-        // Create and configure the request
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        
-        // Set headers to mimic a browser request
-        request.addValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
         // Make the request
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
             
             if let error = error {
@@ -613,22 +586,17 @@ class TranslatorViewModel: ObservableObject {
                 return
             }
             
-            // Print raw response for debugging
-            if let responseString = String(data: data, encoding: .utf8) {
-                
-            }
-            
             do {
                 // Parse the Google Translate free API response format
                 // The format is an array of arrays, with the first sub-array containing translation segments
                 if let json = try JSONSerialization.jsonObject(with: data) as? [Any],
-                   let translations = json[0] as? [[Any]] {
+                   let translations = json.first as? [[Any]] {
                     
                     // Concatenate all translation segments to get the full translated text
                     var completeTranslation = ""
                     
                     for translationPart in translations {
-                        if let translatedText = translationPart[0] as? String {
+                        if let translatedText = translationPart.first as? String {
                             completeTranslation += translatedText
                         }
                     }
