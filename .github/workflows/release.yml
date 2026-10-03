@@ -18,7 +18,6 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     env:
-      OUTPUT_DIR: ${{ runner.temp }}/swiftl-dist
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
@@ -48,6 +47,7 @@ jobs:
               label = 'test-' + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True).strip()
               prerelease = False
           with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'OUTPUT_DIR={os.environ["RUNNER_TEMP"]}/swiftl-dist\n')
               output.write(f'APP_VERSION={version}\nAPP_BUILD_NUMBER={os.environ["GITHUB_RUN_NUMBER"]}\nASSET_LABEL={label}\nIS_PRERELEASE={str(prerelease).lower()}\n')
           PY
 
