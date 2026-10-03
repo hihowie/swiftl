@@ -18,7 +18,7 @@ A macOS menu bar app that allows you to select a screen area, extract text, and 
 ## Setup
 
 1. Grab the latest Github Release or clone this repository
-2. Open the `cursor-translator.xcodeproj` file in Xcode
+2. Open the `SwifTL.xcodeproj` file in Xcode
 3. Build and run the application
 
 ## Usage
@@ -35,3 +35,23 @@ A macOS menu bar app that allows you to select a screen area, extract text, and 
 
 - The app uses Vision framework for OCR (Optical Character Recognition)
 - SwifTL uses a free Google Translate Web API to be offered 100% FREE. If you would like to use your own DeepL API key you can do so from the SwifTL settings.
+
+
+## Local build and package
+
+From the repository root, run:
+
+```sh
+bash swiftl/scripts/package.sh
+```
+
+The script creates a universal Release app (Apple Silicon and Intel), applies
+an ad-hoc signature with the app sandbox entitlements, and creates a verified
+`SwifTL.dmg` with an Applications shortcut. Outputs default to `../dist`; pass
+an output directory as the first argument to override it. Xcode is required.
+This build is for local testing and is not notarized for public distribution.
+
+Open `../dist/SwifTL.app`, then click its book icon in the macOS menu bar.
+Choose source and target languages and click **Select Area to Translate**.
+Screen Recording permission must be granted by the user in System Settings
+for screenshot capture; restart the app if macOS requests it.
