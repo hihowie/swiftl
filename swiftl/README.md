@@ -89,3 +89,34 @@ only in memory while the app is running.
 - Screenshot capture through OCR was not verified because Screen Recording access
   must be granted by the user. A real DeepL request was not made; its request format
   and response handling were checked using mocked responses.
+
+## Automatic GitHub Releases
+
+Push a new version tag to build and publish a GitHub Release:
+
+```sh
+git tag -a v1.1.0 -m "SwifTL 1.1.0"
+git push origin v1.1.0
+```
+
+Tags must use `vMAJOR.MINOR.PATCH`; prerelease tags such as `v1.1.0-beta.1`
+are also supported and create prereleases. Use a new version tag for each
+release. The app's version comes from the tag, and its build number comes
+from the GitHub Actions run number.
+
+The workflow runs translation checks, builds and verifies both arm64 and
+x86_64 architectures, packages a DMG and ZIP, and publishes them alongside
+`SHA256SUMS.txt`. Re-running a tag workflow replaces that release's assets.
+No personal access token or Apple certificate secret is needed; the workflow
+uses the repository's `GITHUB_TOKEN` and an ad-hoc app signature.
+
+For a build-only check without publishing a release, use GitHub Actions →
+**Build and release macOS app** → **Run workflow**, or:
+
+```sh
+gh workflow run release.yml --ref main
+```
+
+The manual run attaches download artifacts to the Actions run and does not
+create a tag or public release. Builds are not notarized by Apple; Developer ID
+signing and notarization require a separate certificate setup.

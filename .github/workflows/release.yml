@@ -1,0 +1,100 @@
+name: Build and release macOS app
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      OUTPUT_DIR: ${{ runner.temp }}/swiftl-dist
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          if os.environ['EVENT_NAME'] == 'push':
+              match = re.fullmatch(r'v([0-9]+\.[0-9]+\.[0-9]+)(?:-([0-9A-Za-z.-]+))?', os.environ['RELEASE_TAG'])
+              if not match:
+                  raise SystemExit('Use a tag such as v1.2.3 or v1.2.3-beta.1')
+              version, prerelease = match.group(1), bool(match.group(2))
+              label = os.environ['RELEASE_TAG']
+          else:
+              source = open('swiftl/SwifTL.xcodeproj/project.pbxproj').read()
+              version = re.search(r'MARKETING_VERSION = ([0-9.]+);', source).group(1)
+              if len(version.split('.')) == 2:
+                  version += '.0'
+              label = 'test-' + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], text=True).strip()
+              prerelease = False
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'APP_VERSION={version}\nAPP_BUILD_NUMBER={os.environ["GITHUB_RUN_NUMBER"]}\nASSET_LABEL={label}\nIS_PRERELEASE={str(prerelease).lower()}\n')
+          PY
+
+      - name: Check translation behavior
+        run: bash swiftl/scripts/check.sh
+
+      - name: Build universal app and DMG
+        run: bash swiftl/scripts/package.sh "$OUTPUT_DIR"
+
+      - name: Prepare release assets
+        run: |
+          mv "$OUTPUT_DIR/SwifTL.dmg" "$OUTPUT_DIR/SwifTL-$ASSET_LABEL-universal.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "$OUTPUT_DIR/SwifTL.app" "$OUTPUT_DIR/SwifTL-$ASSET_LABEL-universal.zip"
+          cd "$OUTPUT_DIR"
+          shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS.txt
+
+      - name: Save build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SwifTL-${{ env.ASSET_LABEL }}-universal
+          path: |
+            ${{ env.OUTPUT_DIR }}/*.dmg
+            ${{ env.OUTPUT_DIR }}/*.zip
+            ${{ env.OUTPUT_DIR }}/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          cat > "$notes" <<'EOF'
+          Universal macOS build for Apple Silicon and Intel. Requires macOS 13 or newer.
+
+          Download the DMG and drag SwifTL into Applications, or use the ZIP archive.
+          This build is ad-hoc signed and is not Apple-notarized. macOS may require approval before opening it.
+          Screenshot translation requires Screen Recording permission. Text input does not.
+          EOF
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$OUTPUT_DIR"/*.dmg "$OUTPUT_DIR"/*.zip "$OUTPUT_DIR/SHA256SUMS.txt" --clobber
+          else
+            options=()
+            if [[ "$IS_PRERELEASE" == true ]]; then
+              options+=(--prerelease)
+            fi
+            gh release create "$RELEASE_TAG" "$OUTPUT_DIR"/*.dmg "$OUTPUT_DIR"/*.zip "$OUTPUT_DIR/SHA256SUMS.txt" \
+              --verify-tag --title "SwifTL $RELEASE_TAG" --notes-file "$notes" --generate-notes "${options[@]}"
+          fi
