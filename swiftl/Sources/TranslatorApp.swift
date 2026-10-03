@@ -15,12 +15,10 @@ struct TranslatorApp: App {
 class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-    private var mouseEventMonitor: Any?
-    var isAreaSelectionActive: (() -> Bool)?
     
     init(contentRect: NSRect, backing: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect,
-                  styleMask: [.titled, .closable, .nonactivatingPanel],
+                  styleMask: [.titled, .closable],
                   backing: backing,
                   defer: flag)
         
@@ -28,7 +26,7 @@ class FloatingPanel: NSPanel {
         self.level = .floating
         self.titlebarAppearsTransparent = true
         self.titleVisibility = .hidden
-        self.standardWindowButton(.closeButton)?.isHidden = true
+        self.standardWindowButton(.closeButton)?.isHidden = false
         self.standardWindowButton(.miniaturizeButton)?.isHidden = true
         self.standardWindowButton(.zoomButton)?.isHidden = true
         
@@ -42,39 +40,10 @@ class FloatingPanel: NSPanel {
         self.isOpaque = false
         self.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.98)
         self.hasShadow = true
-        self.isMovableByWindowBackground = true
+        self.isMovableByWindowBackground = false
+        self.hidesOnDeactivate = false
         self.isReleasedWhenClosed = false
         
-        // Set up mouse event monitoring
-        setupMouseEventMonitoring()
-    }
-    
-    private func setupMouseEventMonitoring() {
-        mouseEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self = self, self.isVisible else { return }
-            
-            // Get the mouse location in screen coordinates
-            let mouseLocation = event.locationInWindow
-            
-            // Convert mouse location to window coordinates
-            let windowFrame = self.frame
-            
-            // Check if click is outside the window
-            if !windowFrame.contains(mouseLocation) {
-                // Check if we're not in area selection mode
-                if !(self.isAreaSelectionActive?() ?? false) {
-                    DispatchQueue.main.async {
-                        self.orderOut(nil)
-                    }
-                }
-            }
-        }
-    }
-    
-    deinit {
-        if let monitor = mouseEventMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
     }
 }
 
@@ -112,11 +81,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ])
         }
         
-        // Set up the area selection check using the shared viewModel
-        panel.isAreaSelectionActive = { [weak self] in
-            self?.viewModel.isSelectingArea ?? false
-        }
-        
         self.panel = panel
 
         // Create the status item
@@ -143,13 +107,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if event.type == .rightMouseUp {
                 showContextMenu()
             } else {
-                if let panel = self.panel {
-                    if panel.isVisible {
-                        panel.orderOut(nil)
-                    } else {
-                        showPanel(sender)
-                    }
-                }
+                showPanel(sender)
             }
         }
     }
@@ -186,7 +144,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         
-        panel.orderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
     }
 }

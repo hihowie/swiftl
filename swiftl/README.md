@@ -6,6 +6,8 @@ A macOS menu bar app for typed or pasted text translation and screenshot OCR tra
 
 - Lives in the macOS menu bar for easy access
 - Type or paste multiline text and translate with Command+Return
+- The input field supports normal caret movement, selection, and editing
+- The panel stays visible when other apps are clicked; close it with the top-left close button
 - Select and copy translations; input stays available when the panel is closed
 - Select any area of the screen to capture text (similar to CMD+Shift+4)
 - Automatically detects and extracts text from the selected area

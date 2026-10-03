@@ -3,6 +3,7 @@ import AppKit
 
 struct ContentView: View {
     @EnvironmentObject private var viewModel: TranslatorViewModel
+    @FocusState private var inputFocused: Bool
     @State private var showingSettings = false
     @State private var showCopyFeedback = false
     @State private var showSaveDefaultsFeedback = false
@@ -56,10 +57,11 @@ struct ContentView: View {
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $viewModel.inputText)
                     .font(.body)
+                    .tint(.primary)
                     .scrollContentBackground(.hidden)
                     .padding(5)
                     .accessibilityLabel("Text to translate")
-                    .disabled(isBusy)
+                    .focused($inputFocused)
                 if viewModel.inputText.isEmpty {
                     Text("Type or paste text to translate…")
                         .foregroundColor(.secondary)
@@ -70,7 +72,11 @@ struct ContentView: View {
             .frame(height: 140)
             .background(Color(nsColor: .textBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.25))
+                    .allowsHitTesting(false)
+            )
             HStack {
                 Button("Translate") { viewModel.translateInput() }
                     .keyboardShortcut(.return, modifiers: .command)
@@ -123,6 +129,12 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 400, height: 600)
+        .onAppear { inputFocused = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            if notification.object is FloatingPanel && !showingSettings {
+                inputFocused = true
+            }
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView(viewModel: viewModel)
         }
