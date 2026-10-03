@@ -20,19 +20,22 @@ struct ContentView: View {
                 .accessibilityLabel("Settings")
                 .disabled(isBusy)
             }
-            HStack(spacing: 12) {
+            HStack(alignment: .languageControlCenter, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("From").font(.caption).foregroundColor(.secondary)
                     Picker("Source language", selection: $viewModel.sourceLanguage) {
                         ForEach(viewModel.availableLanguages, id: \.code) { language in
                             Text(language.name).tag(language)
                         }
-                    }.labelsHidden()
+                    }
+                    .labelsHidden()
+                    .alignmentGuide(.languageControlCenter) { $0[VerticalAlignment.center] }
                 }
                 Button { viewModel.swapLanguages() } label: {
                     Image(systemName: "arrow.left.arrow.right")
                 }
                 .buttonStyle(.borderless)
+                .alignmentGuide(.languageControlCenter) { $0[VerticalAlignment.center] }
                 .help("Swap languages")
                 .accessibilityLabel("Swap languages")
                 VStack(alignment: .leading, spacing: 4) {
@@ -41,7 +44,9 @@ struct ContentView: View {
                         ForEach(viewModel.availableLanguages, id: \.code) { language in
                             Text(language.name).tag(language)
                         }
-                    }.labelsHidden()
+                    }
+                    .labelsHidden()
+                    .alignmentGuide(.languageControlCenter) { $0[VerticalAlignment.center] }
                 }
             }
             .disabled(isBusy)
@@ -132,4 +137,15 @@ struct ContentView: View {
             SettingsView(viewModel: viewModel)
         }
     }
+}
+
+
+private extension VerticalAlignment {
+    enum LanguageControlCenter: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.center]
+        }
+    }
+
+    static let languageControlCenter = VerticalAlignment(LanguageControlCenter.self)
 }
