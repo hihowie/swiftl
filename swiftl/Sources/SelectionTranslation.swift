@@ -33,7 +33,6 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
     private var detectedAnchor: NSRect?
     private var hotKeys: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
-    private var escapeHotKey: EventHotKeyRef?
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var captureInProgress = false
@@ -58,7 +57,6 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
             DispatchQueue.main.async {
                 if key.id == 1 { owner.translateSelection() }
                 if key.id == 2 { owner.translateClipboard() }
-                if key.id == 3 { owner.dismiss() }
             }
             return noErr
         }, 1, &event, Unmanaged.passUnretained(self).toOpaque(), &handler)
@@ -330,12 +328,15 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
         } else {
             panel.orderFrontRegardless() // Keep the source app and its selection active.
         }
-        installMonitors()
+        // Let the opening mouse event finish before observing outside clicks.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self, weak quick] in
+            guard let self = self, let quick = quick, self.model === quick, self.panel?.isVisible == true else { return }
+            self.installMonitors()
+        }
     }
 
     private func installMonitors() {
         removeMonitors()
-        _ = RegisterEventHotKey(UInt32(kVK_Escape), 0, EventHotKeyID(signature: 0x5377544C, id: 3), GetApplicationEventTarget(), 0, &escapeHotKey)
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self] event in
             guard let self = self else { return }
             if event.type == .keyDown {
@@ -350,7 +351,6 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
         }
     }
     private func removeMonitors() {
-        if let key = escapeHotKey { UnregisterEventHotKey(key); escapeHotKey = nil }
         if let monitor = globalMonitor { NSEvent.removeMonitor(monitor); globalMonitor = nil }
         if let monitor = localMonitor { NSEvent.removeMonitor(monitor); localMonitor = nil }
     }

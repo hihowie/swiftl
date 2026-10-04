@@ -159,7 +159,8 @@ mode does not simulate copy and works only where the source exposes selection.
   pointer if the source app does not provide selection bounds. It uses the main
   window's current languages and translation provider.
 - Copy the translation, read it aloud using macOS voices, or pin the window.
-  An unpinned result closes on an outside click; Escape and Close dismiss it.
+  An unpinned result closes on an outside click; Close dismisses it. Escape
+  dismisses a focused result, or works globally when Accessibility is enabled.
   Pinning keeps it visible until explicitly dismissed.
 - **Open in main window** transfers the original text, translation, and languages
   after the request finishes. Quick requests leave main-window edits untouched.
