@@ -196,6 +196,11 @@ SwifTL**, plus the last automatic-button capture status. If macOS shows an enabl
 SwifTL entry but the app reports no permission, remove that entry and add the
 currently running app again. Ad-hoc signatures change with a rebuild, so an older
 copy's authorization may not apply. Keep one installed copy in Applications.
+During local verification, macOS retained the signature of an older unpacked
+GitHub build even after the permission switch was enabled. The TCC log explicitly
+reported a code-requirement mismatch with the running `dist/SwifTL.app`. Old test
+copies were unregistered and archived; permission must be re-added for the current
+copy before live Chrome selection can be verified.
 
 For Chrome: enable **Show a button after selecting text**, confirm **Accessibility:
 Enabled**, close an existing quick result, then drag across ordinary webpage text
@@ -206,5 +211,6 @@ text, use Screenshot or copy text and invoke clipboard translation.
 Tests cover browser group focus, complete web-area selection across fragments,
 missing focus, secure fields, whitespace, unrelated toolbar selection, and cyclic
 trees. Local universal build, signature, DMG checksum, and translation checks passed.
+The GitHub Actions universal packaging build also passed for commit `9064496`.
 A new Chrome test page was prepared; live selection detection is pending effective
 Accessibility permission for the rebuilt app.
