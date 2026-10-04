@@ -3,7 +3,7 @@ import Foundation
 
 // This executable checks the production view model without opening windows.
 class AppDelegate: NSObject, NSApplicationDelegate {
-    func showPanel(_ sender: Any?) {}
+    func showMainWindow() {}
 }
 class AreaSelectionWindow: NSWindow {
     init(viewModel: TranslatorViewModel) {

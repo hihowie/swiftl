@@ -244,10 +244,10 @@ class TranslatorViewModel: ObservableObject {
 
         DispatchQueue.main.async {
             
-            // Show the app and its panel
+            // Restore the main window after screenshot selection
             NSApp.unhide(nil)
             if let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.showPanel(NSStatusBarButton())
+                appDelegate.showMainWindow()
             }
             NSApp.activate(ignoringOtherApps: true)
         }

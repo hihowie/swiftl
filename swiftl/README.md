@@ -1,14 +1,15 @@
 # Cursor Translator
 
-A macOS menu bar app for typed or pasted text translation and screenshot OCR translation.
+A native macOS window app for typed or pasted text translation and screenshot OCR translation.
 
 ## Features
 
-- Lives in the macOS menu bar for easy access
+- Opens as a normal window with a Dock icon; no menu bar status icon
+- Supports resizing, minimizing, and reopening from the Dock or Window → Show SwifTL
 - Type or paste multiline text and translate with Command+Return
 - The input field supports normal caret movement, selection, and editing
-- The panel stays visible when other apps are clicked; close it with the top-left close button
-- Select and copy translations; input stays available when the panel is closed
+- The window stays visible when other apps are clicked; close it with the top-left close button
+- Select and copy translations; input stays available when the window is closed
 - Select any area of the screen to capture text (similar to CMD+Shift+4)
 - Automatically detects and extracts text from the selected area
 - Translate text between multiple languages
@@ -30,7 +31,7 @@ A macOS menu bar app for typed or pasted text translation and screenshot OCR tra
 
 1. Open DMG File and drag drop SwifTL into Applications folder
 2. Navigate to Settings > Privacy & Security to Allow SwifTL to run
-3. Click the translator icon in the menu bar
+3. Launch SwifTL from Applications or the Dock
 4. Select your source and target languages
 5. Type or paste text and click "Translate" (or press Command+Return).
 6. For screenshot translation, click "Screenshot". Press Escape to cancel selection.
@@ -57,7 +58,8 @@ an ad-hoc signature with the app sandbox entitlements, and creates a verified
 an output directory as the first argument to override it. Xcode is required.
 This build is for local testing and is not notarized for public distribution.
 
-Open `../dist/SwifTL.app`, then click its book icon in the macOS menu bar.
+Open `../dist/SwifTL.app` to show the main window. Closing the window keeps the app
+and current text in memory; click its Dock icon to reopen it. Use Command+Q to quit.
 Choose source and target languages and click **Translate** for typed/pasted text, or **Screenshot** for OCR translation.
 Screen Recording permission must be granted by the user in System Settings
 for screenshot capture; restart the app if macOS requests it.
@@ -120,3 +122,16 @@ gh workflow run release.yml --ref main
 The manual run attaches download artifacts to the Actions run and does not
 create a tag or public release. Builds are not notarized by Apple; Developer ID
 signing and notarization require a separate certificate setup.
+
+## Normal-window update
+
+SwifTL now uses a standard, resizable macOS window and a Dock icon, without
+a menu bar status item. Close the window to keep current text in memory; reopen
+it from the Dock or Window → Show SwifTL (Command+1). Command+Q quits the app.
+The main window remembers its position and size.
+
+Universal Release build, app signature, DMG checksum, translation checks, and
+a real typed English-to-Chinese translation with Command+Return passed.
+Window reopening preserved both input and translation. Screenshot selection
+cancellation returned to the main window; full OCR capture still requires the
+user’s Screen Recording permission and was not verified in this update.

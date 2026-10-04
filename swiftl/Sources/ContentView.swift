@@ -126,10 +126,10 @@ struct ContentView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .padding(16)
-        .frame(width: 400, height: 600)
+        .frame(minWidth: 400, minHeight: 600)
         .onAppear { inputFocused = true }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
-            if notification.object is FloatingPanel && !showingSettings {
+            if notification.object is MainWindow && !showingSettings {
                 inputFocused = true
             }
         }
