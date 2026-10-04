@@ -28,9 +28,10 @@ struct ContentView: View {
             HStack(alignment: .languageControlCenter, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("From").font(.caption).foregroundColor(.secondary)
-                    Picker("Source language", selection: $viewModel.sourceLanguage) {
+                    Picker("Source language", selection: Binding(get: { viewModel.selectedSourceCode }, set: { viewModel.selectedSourceCode = $0 })) {
+                        Text("Auto").tag("auto")
                         ForEach(viewModel.availableLanguages, id: \.code) { language in
-                            Text(language.name).tag(language)
+                            Text(language.name).tag(language.code)
                         }
                     }
                     .labelsHidden()
@@ -43,14 +44,23 @@ struct ContentView: View {
                 .alignmentGuide(.languageControlCenter) { $0[VerticalAlignment.center] }
                 .help("Swap languages")
                 .accessibilityLabel("Swap languages")
+                .disabled(!viewModel.canSwap)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("To").font(.caption).foregroundColor(.secondary)
-                    Picker("Target language", selection: $viewModel.targetLanguage) {
-                        ForEach(viewModel.availableLanguages, id: \.code) { language in
-                            Text(language.name).tag(language)
+                    Group {
+                        if viewModel.automaticLanguage {
+                            Text(viewModel.result == nil ? "Chinese / English" : viewModel.automaticTarget.name)
+                                .font(.body).frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(height: 22)
+                                .help("Auto translates Chinese to English and other languages to Chinese. Choose From manually to set To.")
+                        } else {
+                            Picker("Target language", selection: $viewModel.targetLanguage) {
+                                ForEach(viewModel.availableLanguages, id: \.code) { language in
+                                    Text(language.name).tag(language)
+                                }
+                            }.labelsHidden()
                         }
                     }
-                    .labelsHidden()
                     .alignmentGuide(.languageControlCenter) { $0[VerticalAlignment.center] }
                 }
             }
@@ -84,26 +94,17 @@ struct ContentView: View {
                 Button("Translate") { viewModel.translateInput() }
                     .keyboardShortcut(.return, modifiers: .command)
                     .buttonStyle(.borderedProminent)
-                    .disabled(isBusy || viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.sourceLanguage == viewModel.targetLanguage)
+                    .disabled(isBusy || viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.canTranslate)
                 Button("Clear") { viewModel.clearInput() }
                     .disabled(isBusy || (viewModel.inputText.isEmpty && viewModel.translatedText.isEmpty && viewModel.errorMessage == nil))
                 Spacer()
                 Button { viewModel.startAreaSelection() } label: {
                     Label("Screenshot", systemImage: "viewfinder")
                 }
-                .disabled(isBusy || viewModel.sourceLanguage == viewModel.targetLanguage)
+                .disabled(isBusy || !viewModel.canTranslate)
             }
-            if viewModel.sourceLanguage == viewModel.targetLanguage {
+            if !viewModel.automaticLanguage && viewModel.sourceLanguage == viewModel.targetLanguage {
                 Text("Choose different source and target languages.").font(.caption).foregroundColor(.red)
-            }
-            if viewModel.isTranslating {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Translating…").font(.caption).foregroundColor(.secondary)
-                }
-            }
-            if let error = viewModel.errorMessage {
-                Text(error).font(.caption).foregroundColor(.red).lineLimit(3)
             }
             Divider()
             HStack {
@@ -119,16 +120,7 @@ struct ContentView: View {
                 }
                 .disabled(viewModel.translatedText.isEmpty || isBusy)
             }
-            ScrollView {
-                Text(viewModel.translatedText.isEmpty ? "Your translation will appear here." : viewModel.translatedText)
-                    .foregroundColor(viewModel.translatedText.isEmpty ? .secondary : .primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            TranslationResultView(model: viewModel)
         }
         .padding(16)
         .frame(minWidth: 400, minHeight: 600)

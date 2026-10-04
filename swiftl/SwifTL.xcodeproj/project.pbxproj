@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A00400000000000000000001 /* TranslationResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00400000000000000000002 /* TranslationResultView.swift */; };
+		A00300000000000000000001 /* TranslationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00300000000000000000002 /* TranslationResult.swift */; };
 		A00200000000000000000001 /* SelectedTextReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000002 /* SelectedTextReader.swift */; };
 		A00100000000000000000001 /* SelectionTranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00100000000000000000002 /* SelectionTranslation.swift */; };
 		1231423C2B9590D9009DAEA7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1231423B2B9590D9009DAEA7 /* ContentView.swift */; };
@@ -32,6 +34,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A00400000000000000000002 /* TranslationResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationResultView.swift; sourceTree = "<group>"; };
+		A00300000000000000000002 /* TranslationResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationResult.swift; sourceTree = "<group>"; };
 		A00200000000000000000002 /* SelectedTextReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedTextReader.swift; sourceTree = "<group>"; };
 		A00100000000000000000002 /* SelectionTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionTranslation.swift; sourceTree = "<group>"; };
 		123142362B9590D9009DAEA7 /* SwifTL.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SwifTL.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,6 +85,8 @@
 				272E15972D75FC1500DCCFD7 /* TranslatorApp.swift */,
 				A00100000000000000000002 /* SelectionTranslation.swift */,
 				A00200000000000000000002 /* SelectedTextReader.swift */,
+				A00400000000000000000002 /* TranslationResultView.swift */,
+				A00300000000000000000002 /* TranslationResult.swift */,
 				1231423B2B9590D9009DAEA7 /* ContentView.swift */,
 				123142482B959127009DAEA7 /* TranslatorViewModel.swift */,
 				1231424A2B95913A009DAEA7 /* AreaSelectionWindow.swift */,
@@ -176,6 +182,8 @@
 				272E15982D75FC1500DCCFD7 /* TranslatorApp.swift in Sources */,
 				A00100000000000000000001 /* SelectionTranslation.swift in Sources */,
 				A00200000000000000000001 /* SelectedTextReader.swift in Sources */,
+				A00400000000000000000001 /* TranslationResultView.swift in Sources */,
+				A00300000000000000000001 /* TranslationResult.swift in Sources */,
 				1231424B2B95913A009DAEA7 /* AreaSelectionWindow.swift in Sources */,
 				123142492B959127009DAEA7 /* TranslatorViewModel.swift in Sources */,
 			);

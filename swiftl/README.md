@@ -1,4 +1,4 @@
-# Cursor Translator
+# SwifTL
 
 A native macOS window app for typed or pasted text translation and screenshot OCR translation.
 
@@ -12,6 +12,9 @@ A native macOS window app for typed or pasted text translation and screenshot OC
 - Select and copy translations; input stays available when the window is closed
 - Select any area of the screen to capture text (similar to CMD+Shift+4)
 - Automatically detects and extracts text from the selected area
+- Auto detects the source locally: Chinese → English, other languages → Simplified Chinese
+- Read translations with paragraph-by-paragraph bilingual or translation-only display
+- English single words show local Dictionary definitions and system pronunciation
 - Translate text between multiple languages
 - Language selections are remembered automatically; use the button between From and To to swap them
 - Simple, lightweight, and intuitive interface
@@ -32,7 +35,7 @@ A native macOS window app for typed or pasted text translation and screenshot OC
 1. Open DMG File and drag drop SwifTL into Applications folder
 2. Navigate to Settings > Privacy & Security to Allow SwifTL to run
 3. Launch SwifTL from Applications or the Dock
-4. Select your source and target languages
+4. Leave From on Auto for smart Chinese/English translation, or choose a source and target manually
 5. Type or paste text and click "Translate" (or press Command+Return).
 6. For screenshot translation, click "Screenshot". Press Escape to cancel selection.
 7. Click and drag to select the area containing text you want to translate
@@ -60,7 +63,7 @@ This build is for local testing and is not notarized for public distribution.
 
 Open `../dist/SwifTL.app` to show the main window. Closing the window keeps the app
 and current text in memory; click its Dock icon to reopen it. Use Command+Q to quit.
-Choose source and target languages and click **Translate** for typed/pasted text, or **Screenshot** for OCR translation.
+Leave **From → Auto** enabled, or choose source and target languages manually, then click **Translate** for typed/pasted text or **Screenshot** for OCR translation.
 Screen Recording permission must be granted by the user in System Settings
 for screenshot capture; restart the app if macOS requests it.
 
@@ -69,7 +72,7 @@ for screenshot capture; restart the app if macOS requests it.
 
 ```sh
 bash swiftl/scripts/check.sh
-# Also send three non-sensitive sample texts to Google:
+# Also send non-sensitive multilingual and paragraph samples to Google:
 bash swiftl/scripts/check.sh --live
 ```
 
@@ -214,3 +217,65 @@ trees. Local universal build, signature, DMG checksum, and translation checks pa
 The GitHub Actions universal packaging build also passed for commit `9064496`.
 A new Chrome test page was prepared; live selection detection is pending effective
 Accessibility permission for the rebuilt app.
+
+## Automatic language, bilingual reading, and word mode
+
+**From → Auto** is the default for this update. SwifTL detects the input language
+locally with Natural Language, translating Chinese (including Traditional) to
+English and other languages to Simplified Chinese. A single English-word candidate
+is treated as English. Short or ambiguous input can be misidentified; choose From
+manually to override it. Google receives `sl=auto`, and DeepL's automatic requests
+omit `source_lang`. The direction is chosen once locally before translation;
+provider detection never triggers an additional translation request.
+
+Auto shows the computed target under To. Select a concrete From language to choose
+To manually. Previous manual choices remain saved. After a successful Auto result,
+Swap switches to the reversed actual direction in manual mode. Unknown or unavailable
+source languages cannot be swapped automatically.
+
+**Bilingual** puts each original paragraph directly above its translation. Switch
+to **Translation only** to hide the originals; this display choice is shared between
+the main window and quick results and is remembered. Blank lines separate paragraphs;
+single line breaks remain inside a paragraph. CRLF is normalized. Google translates
+one paragraph at a time; DeepL uses ordered arrays in batches of up to 50 texts,
+kept below its request-size limit. Copy exports translated paragraphs only.
+
+All paragraphs must succeed before the translation is published. A failure retains
+the original and allows retry, without showing a partially aligned result. Editing
+while a request runs is allowed; a notice makes clear that the result belongs to
+the submitted snapshot. Screenshot OCR keeps a separate original without replacing
+manual input. Vision revision 3 enables automatic language detection, and OCR runs
+on a background queue so the window remains responsive.
+
+An English single word (including internal apostrophes/hyphens and surrounding
+punctuation) automatically shows a word card. **Pronounce** reads the original in
+English; **Text mode** switches that result to ordinary bilingual display.
+**Local dictionary** uses macOS Dictionary Services and presents the definition as
+provided, without parsing or fabricating examples. Missing dictionaries do not
+block translation. **Open Dictionary** opens the word in Apple's Dictionary app,
+where dictionaries can be enabled in settings. Local lookup and pronunciation
+remain available after a network translation failure. No extra account, key,
+third-party dictionary service, or text history is added.
+
+### Verification for this update
+
+- Production-model checks cover auto/manual modes and saved preferences, language
+  detection, word boundaries, missing dictionaries, paragraph order, batch limits,
+  response-count errors, failure/retry, edited snapshots, stale dictionary callbacks,
+  screenshot-original isolation, and complete quick-result transfer.
+- Actual Google translations passed for English, Simplified/Traditional Chinese,
+  Japanese, multiple paragraphs, special characters, and an English single word.
+- Production Vision OCR recognized a generated English image in Auto and manual
+  modes, without screen-recording access. First use can take longer while macOS
+  compiles its recognition models.
+- Native UI checks passed for bilingual/translation-only display, word definitions,
+  Text mode, input-change notices, Command+Return, copy feedback, language swap,
+  window reopening, and opening Dictionary at the selected word. Pronunciation
+  was triggered through the UI; audible output was not independently assessed.
+- Universal Release build, ad-hoc signature, and DMG checksum passed. Live DeepL
+  calls were not made; its batching and response parsing were checked with mocks.
+- The rebuilt app reports no effective Accessibility permission. Live Chrome
+  selection remains unverified. Full screen capture through OCR and quick-panel
+  UI transfer also remain unverified (the UI tool kept targeting the main window);
+  the shared result model and transfer were checked automatically. Reauthorize the
+  installed app copy for Accessibility and Screen Recording when required.

@@ -314,12 +314,12 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
         model = quick
         quick.inputText = text ?? ""
         if let text = text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if quick.sourceLanguage == quick.targetLanguage {
+            if !quick.automaticLanguage && quick.sourceLanguage == quick.targetLanguage {
                 quick.errorMessage = "Choose different source and target languages in the main window."
             } else { quick.translateInput() }
         } else { quick.errorMessage = error ?? "Select text to translate." }
         if panel == nil {
-            let window = SelectionPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 390), styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
+            let window = SelectionPanel(contentRect: NSRect(x: 0, y: 0, width: 400, height: 480), styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
             window.title = "Quick Translation"
             window.level = .floating
             window.hidesOnDeactivate = false
@@ -378,11 +378,7 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
     func openInMainWindow() {
         guard let model = model, let main = appDelegate?.viewModel else { return }
         guard !main.isTranslating, !main.isSelectingArea else { notice = "Wait for the main window’s translation to finish."; return }
-        main.sourceLanguage = model.sourceLanguage
-        main.targetLanguage = model.targetLanguage
-        main.inputText = model.inputText
-        main.translatedText = model.translatedText
-        main.errorMessage = model.errorMessage
+        main.adoptResult(from: model)
         dismiss()
         appDelegate?.showMainWindow()
     }
@@ -421,25 +417,16 @@ struct SelectionResultView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("\(model.sourceLanguage.name) → \(model.targetLanguage.name)").font(.caption).foregroundColor(.secondary)
+                Text("Quick Translation").font(.caption).foregroundColor(.secondary)
                 Spacer()
                 Button { coordinator.isPinned.toggle() } label: {
                     Image(systemName: coordinator.isPinned ? "pin.fill" : "pin")
                 }.help(coordinator.isPinned ? "Unpin" : "Keep open").accessibilityLabel(coordinator.isPinned ? "Unpin" : "Pin translation")
             }
-            Text("Original").font(.headline)
-            ScrollView { Text(model.inputText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-                .frame(height: 70)
-            Divider()
-            HStack {
-                Text("Translation").font(.headline)
-                Spacer()
-                if model.isTranslating { ProgressView().controlSize(.small) }
+            TranslationResultView(model: model)
+            if model.errorMessage != nil && !model.inputText.isEmpty {
+                Button("Retry") { model.translateInput() }.disabled(model.isTranslating)
             }
-            ScrollView {
-                if let error = model.errorMessage { Text(error).foregroundColor(.red).frame(maxWidth: .infinity, alignment: .leading) }
-                Text(model.translatedText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(maxHeight: .infinity)
             if !AXIsProcessTrusted(), model.errorMessage != nil {
                 Button("Enable Accessibility…") { coordinator.requestAccessibility() }
             }
@@ -451,7 +438,7 @@ struct SelectionResultView: View {
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 }.disabled(model.translatedText.isEmpty)
-                Button(coordinator.isSpeaking ? "Stop" : "Read aloud") { coordinator.speak(model.translatedText, language: model.targetLanguage.code) }.disabled(model.translatedText.isEmpty)
+                Button(coordinator.isSpeaking ? "Stop" : "Read aloud") { coordinator.speak(model.translatedText, language: model.result?.target.code ?? model.targetLanguage.code) }.disabled(model.translatedText.isEmpty)
                 Spacer()
             }
             HStack {
@@ -459,6 +446,6 @@ struct SelectionResultView: View {
                 Spacer()
                 Button("Close") { coordinator.dismiss() }
             }
-        }.padding(14).frame(width: 380, height: 390)
+        }.padding(14).frame(width: 400, height: 480)
     }
 }

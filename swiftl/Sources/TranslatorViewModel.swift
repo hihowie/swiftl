@@ -16,6 +16,19 @@ class TranslatorViewModel: ObservableObject {
     @Published var targetLanguage: Language {
         didSet { if shouldSaveLanguagePreferences { saveLanguagePreferences() } }
     }
+    @Published var automaticLanguage = true {
+        didSet { if shouldSaveLanguagePreferences { preferences.set(automaticLanguage, forKey: "AutomaticLanguage") } }
+    }
+    @Published var bilingual = true {
+        didSet {
+            preferences.set(bilingual, forKey: "BilingualResults")
+            displayPreferenceChanged?(bilingual)
+        }
+    }
+    @Published var result: TranslationResult?
+    @Published var showWordDetails = true
+    @Published var completedParagraphs = 0
+    @Published var totalParagraphs = 0
     @Published var inputText: String = ""
     @Published var translatedText: String = ""
     @Published var isTranslating: Bool = false
@@ -53,8 +66,18 @@ class TranslatorViewModel: ObservableObject {
     private let session: URLSession
     private let preferences: UserDefaults
     private var shouldSaveLanguagePreferences = false
+    private var requestID = UUID()
+    private var displayPreferenceChanged: ((Bool) -> Void)?
+    private let languageDetector: (String) -> String?
+    private let dictionaryLookup: (String) -> String?
+    private let ocrQueue = DispatchQueue(label: "SwifTL.ocr", qos: .userInitiated)
+    private let dictionaryQueue = DispatchQueue(label: "SwifTL.dictionary", qos: .userInitiated)
 
-    init(session: URLSession = .shared, preferences: UserDefaults = .standard, persistLanguageChanges: Bool = true) {
+    init(session: URLSession = .shared, preferences: UserDefaults = .standard, persistLanguageChanges: Bool = true,
+         languageDetector: @escaping (String) -> String? = TranslationText.detectLanguage,
+         dictionaryLookup: @escaping (String) -> String? = TranslationText.definition) {
+        self.languageDetector = languageDetector
+        self.dictionaryLookup = dictionaryLookup
         self.session = session
         self.preferences = preferences
         // Default to Japanese and English, but will be overridden by saved preferences if they exist
@@ -69,6 +92,8 @@ class TranslatorViewModel: ObservableObject {
         
         // Load saved language preferences
         loadLanguagePreferences()
+        automaticLanguage = preferences.object(forKey: "AutomaticLanguage") as? Bool ?? true
+        bilingual = preferences.object(forKey: "BilingualResults") as? Bool ?? true
         shouldSaveLanguagePreferences = persistLanguageChanges
     }
     
@@ -161,7 +186,10 @@ class TranslatorViewModel: ObservableObject {
     }
     
     func makeQuickTranslationModel() -> TranslatorViewModel {
-        let quick = TranslatorViewModel(session: session, preferences: preferences, persistLanguageChanges: false)
+        let quick = TranslatorViewModel(session: session, preferences: preferences, persistLanguageChanges: false, languageDetector: languageDetector, dictionaryLookup: dictionaryLookup)
+        quick.automaticLanguage = automaticLanguage
+        quick.bilingual = bilingual
+        quick.displayPreferenceChanged = { [weak self] value in self?.bilingual = value }
         quick.sourceLanguage = sourceLanguage
         quick.targetLanguage = targetLanguage
         quick.deepLApiKey = deepLApiKey
@@ -169,40 +197,142 @@ class TranslatorViewModel: ObservableObject {
         return quick
     }
 
-    func swapLanguages() {
-        guard !isTranslating, !isSelectingArea else { return }
-        let previousSource = sourceLanguage
-        sourceLanguage = targetLanguage
-        targetLanguage = previousSource
+    var selectedSourceCode: String {
+        get { automaticLanguage ? "auto" : sourceLanguage.code }
+        set {
+            if newValue == "auto" { automaticLanguage = true }
+            else if let language = availableLanguages.first(where: { $0.code == newValue }) {
+                // Choosing the remembered manual source restores its remembered target.
+                automaticLanguage = false
+                sourceLanguage = language
+            }
+        }
     }
 
+    var canSwap: Bool {
+        !isTranslating && !isSelectingArea && (!automaticLanguage || (result?.succeeded == true && result?.source.map { availableLanguages.contains($0) } == true))
+    }
     var canTranslate: Bool {
-        !isTranslating && !isSelectingArea && sourceLanguage != targetLanguage
+        !isTranslating && !isSelectingArea && (automaticLanguage || sourceLanguage != targetLanguage)
+    }
+    var inputHasChanged: Bool {
+        guard let result = result, !result.fromScreenshot else { return false }
+        return result.original != inputText
+    }
+    var automaticTarget: Language {
+        if let result = result { return result.target }
+        return availableLanguages.first { $0.code == "zh-Hans" }!
+    }
+
+    func swapLanguages() {
+        guard canSwap else { return }
+        if automaticLanguage, let result = result, let source = result.source {
+            automaticLanguage = false
+            sourceLanguage = result.target
+            targetLanguage = source
+        } else {
+            let previousSource = sourceLanguage
+            sourceLanguage = targetLanguage
+            targetLanguage = previousSource
+        }
     }
 
     func translateInput() {
         guard canTranslate, !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        isTranslating = true
-        translatedText = ""
-        errorMessage = nil
-        translateText(inputText) { [weak self] result in
-            self?.finishTranslation(result)
-        }
+        beginTranslation(inputText, fromScreenshot: false)
     }
 
     func clearInput() {
         guard !isTranslating, !isSelectingArea else { return }
         inputText = ""
-        translatedText = ""
-        errorMessage = nil
+        resetResult()
     }
 
-    private func finishTranslation(_ result: String?) {
-        isTranslating = false
-        if let result = result {
-            translatedText = result
-        } else if errorMessage == nil {
-            errorMessage = "Translation failed. Check your connection and try again."
+    private func resetResult() {
+        requestID = UUID()
+        result = nil
+        translatedText = ""
+        errorMessage = nil
+        completedParagraphs = 0
+        totalParagraphs = 0
+        showWordDetails = true
+    }
+
+    private func language(for code: String?) -> Language? {
+        guard let code = code else { return nil }
+        let mapped = ["zh": "zh-Hans", "pt": "pt-PT" ][code] ?? code
+        return availableLanguages.first(where: { $0.code == mapped }) ?? Language(name: code, code: code)
+    }
+
+    // Every request owns a snapshot and publishes the complete aligned result atomically.
+    func beginTranslation(_ text: String, fromScreenshot: Bool) {
+        resetResult()
+        let id = requestID
+        guard !TranslationText.paragraphs(text).isEmpty else {
+            isTranslating = false
+            errorMessage = "No text was recognized. Try again with a larger area."
+            return
+        }
+        let automatic = automaticLanguage
+        let source = automatic ? language(for: languageDetector(text)) : sourceLanguage
+        let chinese = source?.code.hasPrefix("zh") == true
+        let target = automatic ? availableLanguages.first(where: { $0.code == (chinese ? "en" : "zh-Hans") })! : targetLanguage
+        let word = source?.code == "en" ? TranslationText.englishWord(text) : nil
+        result = TranslationResult(original: text, source: source, target: target, automatic: automatic,
+                                   fromScreenshot: fromScreenshot, word: word.map { WordDetails(word: $0) })
+        isTranslating = true
+        let blocks = TranslationText.paragraphs(text)
+        totalParagraphs = blocks.count
+        if let word = word {
+            dictionaryQueue.async { [weak self] in
+                guard let self = self else { return }
+                let definition = self.dictionaryLookup(word)
+                DispatchQueue.main.async {
+                    guard self.requestID == id else { return }
+                    self.result?.word?.definition = definition
+                    self.result?.word?.isLookingUp = false
+                }
+            }
+        }
+        translateParagraphs(blocks, source: automatic ? nil : source, target: target, id: id) { [weak self] response in
+            guard let self = self, self.requestID == id else { return }
+            self.isTranslating = false
+            switch response {
+            case .success(let translations):
+                self.result?.paragraphs = zip(blocks, translations).enumerated().map {
+                    TranslationParagraph(id: $0.offset, original: $0.element.0, translation: $0.element.1)
+                }
+                self.result?.succeeded = true
+                self.translatedText = self.result?.translation ?? ""
+            case .failure(let error): self.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func adoptResult(from model: TranslatorViewModel) {
+        guard !isTranslating, !isSelectingArea else { return }
+        resetResult()
+        automaticLanguage = model.automaticLanguage
+        sourceLanguage = model.sourceLanguage
+        targetLanguage = model.targetLanguage
+        bilingual = model.bilingual
+        inputText = model.result?.original ?? model.inputText
+        result = model.result
+        translatedText = model.translatedText
+        errorMessage = model.errorMessage
+        showWordDetails = model.showWordDetails
+        // A lookup may still be finishing in the quick model. Resolve independently.
+        if let word = result?.word, word.isLookingUp {
+            let id = requestID
+            dictionaryQueue.async { [weak self] in
+                guard let self = self else { return }
+                let definition = self.dictionaryLookup(word.word)
+                DispatchQueue.main.async {
+                    guard self.requestID == id else { return }
+                    self.result?.word?.definition = definition
+                    self.result?.word?.isLookingUp = false
+                }
+            }
         }
     }
 
@@ -248,8 +378,7 @@ class TranslatorViewModel: ObservableObject {
         windowController = nil
         isSelectingArea = false
         isTranslating = true
-        errorMessage = nil
-        translatedText = ""
+        resetResult()
 
         DispatchQueue.main.async {
             
@@ -280,9 +409,7 @@ class TranslatorViewModel: ObservableObject {
                 
                 DispatchQueue.main.async {
                     if let text = recognizedText, !text.isEmpty {
-                        self.translateText(text) { result in
-                            self.finishTranslation(result)
-                        }
+                        self.beginTranslation(text, fromScreenshot: true)
                     } else {
                         self.isTranslating = false
                         self.errorMessage = "No text was recognized in the selected area."
@@ -309,7 +436,7 @@ class TranslatorViewModel: ObservableObject {
         return nil
     }
     
-    private func recognizeText(in image: NSImage, completion: @escaping (String?) -> Void) {
+    func recognizeText(in image: NSImage, completion: @escaping (String?) -> Void) {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             
             completion(nil)
@@ -335,7 +462,6 @@ class TranslatorViewModel: ObservableObject {
         // Create a text recognition request
         let request = VNRecognizeTextRequest { request, error in
             guard error == nil else {
-                
                 completion(nil)
                 return
             }
@@ -393,7 +519,8 @@ class TranslatorViewModel: ObservableObject {
         // Configure the recognition request for optimal performance
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
-        request.recognitionLanguages = [languageHint]
+        request.recognitionLanguages = automaticLanguage ? ["en-US", "zh-Hans", "zh-Hant"] : [languageHint]
+        request.automaticallyDetectsLanguage = automaticLanguage
         
         // DO NOT set a specific region of interest - this forces it to use the actual image bounds
         // request.regionOfInterest = CGRect(x: 0, y: 0, width: 1, height: 1)
@@ -401,16 +528,14 @@ class TranslatorViewModel: ObservableObject {
         // Use custom option to improve accuracy
         request.customWords = [] // No custom words needed
         request.minimumTextHeight = 0.01 // Allow smaller text to be recognized (1% of image height)
-        request.revision = VNRecognizeTextRequestRevision2 // Use latest revision
+        request.revision = VNRecognizeTextRequestRevision3 // Supports automatic language detection on macOS 13+.
         
         // Create a handler to process the image
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         
-        do {
-            try handler.perform([request])
-        } catch {
-            
-            completion(nil)
+        ocrQueue.async {
+            do { try handler.perform([request]) }
+            catch { completion(nil) }
         }
     }
     
@@ -434,220 +559,103 @@ class TranslatorViewModel: ObservableObject {
         return languageMap[isoCode] ?? "en-US"
     }
     
-    private func translateText(_ text: String, completion: @escaping (String?) -> Void) {
-        guard !text.isEmpty else {
-            completion("")
-            return
-        }
-        
-        // Check if DeepL is enabled and we have an API key
-        if isDeepLEnabled && !deepLApiKey.isEmpty {
-            translateWithDeepL(text, completion: completion)
-        } else {
-            translateWithGoogleTranslate(text, completion: completion)
-        }
+    private struct TranslationFailure: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
     }
-    
-    private func translateWithDeepL(_ text: String, completion: @escaping (String?) -> Void) {
-        let from = convertToDeepLLanguageCode(sourceLanguage.code)
-        let to = convertToDeepLLanguageCode(targetLanguage.code)
+
+    private func translateParagraphs(_ blocks: [String], source: Language?, target: Language, id: UUID,
+                                     completion: @escaping (Result<[String], Error>) -> Void) {
+        let deepL = isDeepLEnabled && !deepLApiKey.isEmpty
+        let apiKey = deepLApiKey
+        var outputs: [String] = []
+        func next(_ index: Int) {
+            guard self.requestID == id else { return }
+            if index == blocks.count { completion(.success(outputs)); return }
+            // DeepL allows 50 texts and a 128 KiB request body. Keep batches below both limits.
+            var batch = [blocks[index]]
+            if deepL {
+                while index + batch.count < blocks.count && batch.count < 50 {
+                    let proposed = batch + [blocks[index + batch.count]]
+                    guard let body = try? JSONSerialization.data(withJSONObject: self.deepLPayload(proposed, source: source, target: target)), body.count < 120_000 else { break }
+                    batch = proposed
+                }
+            }
+            let requestTexts = batch
+            let request: URLRequest
+            do { request = try deepL ? self.deepLRequest(batch, source: source, target: target, key: apiKey) : self.googleRequest(batch[0], source: source, target: target) }
+            catch { completion(.failure(error)); return }
+            self.session.dataTask(with: request) { data, response, error in
+                let parsed: Result<[String], Error>
+                do {
+                    if let error = error { throw TranslationFailure(message: "Network error: \(error.localizedDescription)") }
+                    guard let http = response as? HTTPURLResponse else { throw TranslationFailure(message: "No response received. Try again.") }
+                    guard http.statusCode == 200 else { throw TranslationFailure(message: "\(deepL ? "DeepL API" : "Translation API") Error: HTTP \(http.statusCode). Try again.") }
+                    guard let data = data else { throw TranslationFailure(message: "No translation data received.") }
+                    parsed = .success(try self.parseResponse(data, deepL: deepL, count: requestTexts.count))
+                } catch { parsed = .failure(error) }
+                DispatchQueue.main.async {
+                    guard self.requestID == id else { return }
+                    switch parsed {
+                    case .failure: completion(parsed)
+                    case .success(let values):
+                        outputs += values
+                        self.completedParagraphs = outputs.count
+                        next(index + requestTexts.count)
+                    }
+                }
+            }.resume()
+        }
+        next(0)
+    }
+
+    private func deepLPayload(_ texts: [String], source: Language?, target: Language) -> [String: Any] {
+        var body: [String: Any] = ["text": texts, "target_lang": convertToDeepLLanguageCode(target.code)]
+        if let source = source { body["source_lang"] = source.code.hasPrefix("pt") ? "PT" : convertToDeepLLanguageCode(source.code) }
+        return body
+    }
+
+    private func deepLRequest(_ texts: [String], source: Language?, target: Language, key: String) throws -> URLRequest {
         var request = URLRequest(url: URL(string: "https://api-free.deepl.com/v2/translate")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "text": [text], "source_lang": from, "target_lang": to
-        ])
+        let body = try JSONSerialization.data(withJSONObject: deepLPayload(texts, source: source, target: target))
+        guard body.count < 128 * 1024 else { throw TranslationFailure(message: "A paragraph is too long for DeepL. Split it into smaller paragraphs.") }
+        request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("DeepL-Auth-Key \(deepLApiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("DeepL-Auth-Key \(key)", forHTTPHeaderField: "Authorization")
+        return request
+    }
 
-        // Make the request
-        let task = session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                
-                DispatchQueue.main.async {
-                    self.errorMessage = "Network error: \(error.localizedDescription)"
-                    completion(nil)
-                }
-                return
-            }
-            
-            // Check HTTP status code
-            if let httpResponse = response as? HTTPURLResponse {
-                
-                
-                if httpResponse.statusCode != 200 {
-                    DispatchQueue.main.async {
-                        self.errorMessage = "DeepL API Error: HTTP \(httpResponse.statusCode)"
-                        completion(nil)
-                    }
-                    return
-                }
-            }
-            
-            guard let data = data else {
-                DispatchQueue.main.async {
-                    self.errorMessage = "No data received from DeepL API"
-                    completion(nil)
-                }
-                return
-            }
-            
-            do {
-                // Parse the DeepL API response
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let translations = json["translations"] as? [[String: Any]],
-                   let firstTranslation = translations.first,
-                   let translatedText = firstTranslation["text"] as? String {
-                    
-                    
-                    
-                    DispatchQueue.main.async {
-                        completion(translatedText)
-                    }
-                    return
-                }
-                
-                // Failed to parse as expected
-                
-                DispatchQueue.main.async {
-                    self.errorMessage = "Couldn't extract translation from DeepL response"
-                    completion(nil)
-                }
-            } catch {
-                
-                DispatchQueue.main.async {
-                    self.errorMessage = "Error processing DeepL translation result"
-                    completion(nil)
-                }
-            }
-        }
-        
-        task.resume()
-    }
-    
     private func convertToDeepLLanguageCode(_ code: String) -> String {
-        // Map language codes to DeepL supported codes
-        // DeepL has different format requirements for some languages
-        let languageMap: [String: String] = [
-            "en": "EN",
-            "es": "ES",
-            "fr": "FR",
-            "de": "DE",
-            "it": "IT",
-            "ja": "JA",
-            "ko": "KO",
-            "pt-BR": "PT-BR",
-            "pt-PT": "PT-PT",
-            "ru": "RU",
-            "zh-Hans": "ZH", // Simplified Chinese
-            "zh-Hant": "ZH", // Traditional Chinese
-            "nl": "NL",
-            "pl": "PL",
-            "tr": "TR",
-            "uk": "UK",
-            "ar": "AR",
-            "hi": "HI"
-        ]
-        
-        return languageMap[code] ?? "EN"
+        ["en": "EN", "es": "ES", "fr": "FR", "de": "DE", "it": "IT", "ja": "JA", "ko": "KO",
+         "pt-BR": "PT-BR", "pt-PT": "PT-PT", "ru": "RU", "zh-Hans": "ZH", "zh-Hant": "ZH",
+         "nl": "NL", "pl": "PL", "tr": "TR", "uk": "UK", "ar": "AR", "hi": "HI"][code] ?? code.uppercased()
     }
-    
-    private func translateWithGoogleTranslate(_ text: String, completion: @escaping (String?) -> Void) {
+
+    private func googleRequest(_ text: String, source: Language?, target: Language) throws -> URLRequest {
         var components = URLComponents(string: "https://translate.googleapis.com/translate_a/single")!
-        components.queryItems = [
-            URLQueryItem(name: "client", value: "gtx"),
-            URLQueryItem(name: "sl", value: sourceLanguage.code),
-            URLQueryItem(name: "tl", value: targetLanguage.code),
-            URLQueryItem(name: "dt", value: "t"),
-            URLQueryItem(name: "q", value: text)
-        ]
-        // Some servers decode query strings as form data, where a literal + means space.
+        components.queryItems = [URLQueryItem(name: "client", value: "gtx"),
+            URLQueryItem(name: "sl", value: source?.code ?? "auto"),
+            URLQueryItem(name: "tl", value: target.code), URLQueryItem(name: "dt", value: "t"), URLQueryItem(name: "q", value: text)]
         components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
-        guard let url = components.url else {
-            errorMessage = "Couldn't create the translation request."
-            completion(nil)
-            return
-        }
+        guard let url = components.url else { throw TranslationFailure(message: "Couldn't create the translation request.") }
         var request = URLRequest(url: url)
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        return request
+    }
 
-        // Make the request
-        let task = session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                
-                DispatchQueue.main.async {
-                    self.errorMessage = "Network error: \(error.localizedDescription)"
-                    completion(nil)
-                }
-                return
-            }
-            
-            // Check HTTP status code
-            if let httpResponse = response as? HTTPURLResponse {
-                
-                
-                if httpResponse.statusCode != 200 {
-                    DispatchQueue.main.async {
-                        self.errorMessage = "API Error: HTTP \(httpResponse.statusCode)"
-                        completion(nil)
-                    }
-                    return
-                }
-            }
-            
-            guard let data = data else {
-                DispatchQueue.main.async {
-                    self.errorMessage = "No data received from translation API"
-                    completion(nil)
-                }
-                return
-            }
-            
-            do {
-                // Parse the Google Translate free API response format
-                // The format is an array of arrays, with the first sub-array containing translation segments
-                if let json = try JSONSerialization.jsonObject(with: data) as? [Any],
-                   let translations = json.first as? [[Any]] {
-                    
-                    // Concatenate all translation segments to get the full translated text
-                    var completeTranslation = ""
-                    
-                    for translationPart in translations {
-                        if let translatedText = translationPart.first as? String {
-                            completeTranslation += translatedText
-                        }
-                    }
-                    
-                    if !completeTranslation.isEmpty {
-                        
-                        
-                        DispatchQueue.main.async {
-                            completion(completeTranslation)
-                        }
-                        return
-                    }
-                }
-                
-                // Failed to parse as expected
-                
-                DispatchQueue.main.async {
-                    self.errorMessage = "Couldn't extract translation from response"
-                    completion(nil)
-                }
-            } catch {
-                
-                DispatchQueue.main.async {
-                    self.errorMessage = "Error processing translation result"
-                    completion(nil)
-                }
-            }
+    private func parseResponse(_ data: Data, deepL: Bool, count: Int) throws -> [String] {
+        let json = try JSONSerialization.jsonObject(with: data)
+        if deepL, let object = json as? [String: Any], let entries = object["translations"] as? [[String: Any]], entries.count == count {
+            let texts = entries.compactMap { $0["text"] as? String }
+            if texts.count == count && texts.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) { return texts }
+        } else if !deepL, let array = json as? [Any], let segments = array.first as? [[Any]], !segments.isEmpty {
+            let texts = segments.compactMap { $0.first as? String }
+            let text = texts.joined()
+            if texts.count == segments.count && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [text] }
         }
-        
-        task.resume()
+        throw TranslationFailure(message: "Couldn't extract aligned translations from the response. Try again.")
     }
 }
