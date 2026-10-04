@@ -66,6 +66,12 @@ final class ReleaseProtocol: URLProtocol {
         request(try release("v1.2.0", ["assets": unsafeAssets])); if case .available(let item) = checker.status { check(item.archiveURL == nil && item.archiveSHA256 == nil, "untrusted download URL and invalid checksum rejected") }
 
         let fm = FileManager.default
+        let mockHome = URL(fileURLWithPath: "/tmp/swiftl-home")
+        for folder in ["Desktop", "Documents", "Downloads", "Library/Mobile Documents"] {
+            check(UpdateFiles.isProtectedLocation(mockHome.appendingPathComponent(folder + "/SwifTL.app"), home: mockHome), "protected folder blocked before app quits: \(folder)")
+        }
+        check(!UpdateFiles.isProtectedLocation(mockHome.appendingPathComponent("Applications/SwifTL.app"), home: mockHome), "writable Applications permits automatic update")
+        check(!UpdateFiles.isProtectedLocation(mockHome.appendingPathComponent("Desktop-other/SwifTL.app"), home: mockHome), "folder detection respects path boundaries")
         let root = fm.temporaryDirectory.appendingPathComponent("SwifTL update tests ' $ " + UUID().uuidString)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }

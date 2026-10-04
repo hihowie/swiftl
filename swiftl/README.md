@@ -298,7 +298,9 @@ reopen command fails, the helper attempts to restore the previous copy. An app c
 after macOS accepts the reopen command cannot be detected by this helper.
 
 Install SwifTL in a writable Applications folder first. Automatic replacement is
-unavailable from a mounted DMG, App Translocation, or a read-only app folder.
+unavailable from a mounted DMG, App Translocation, a read-only app folder, or
+protected Desktop/Documents/Downloads/iCloud Drive locations. These locations
+are rejected before the app quits; move the app to Applications and retry.
 **Download installer** and **View release** provide manual fallbacks; releases
 without a ZIP digest support manual installation only. Settings and Keychain data
 are kept; current input/results are cleared by the restart. Ad-hoc signing means
@@ -311,3 +313,16 @@ validation, corrupted signatures, symbolic links, replacement, backup, and rollb
 The installer tests use disposable app copies and do not replace the running app.
 `check.sh --live` additionally checks the published stable release and downloads,
 verifies, and installs its real ZIP in a disposable copy.
+
+### Update verification
+
+Local and GitHub Actions checks, universal Release builds, signature validation,
+and DMG checksums passed. The real stable Release endpoint, ZIP digest, signed app,
+and replacement were verified. A native UI test upgraded an isolated app copy from
+1.0.0 to 1.1.0: download, quit, replacement, automatic relaunch, success feedback,
+and the up-to-date message all passed. Preferences survived the restart.
+
+The desktop-folder UI test was blocked during helper file replacement by macOS.
+Version 1.1.1 rejects protected user folders before quitting; move the app to
+Applications for automatic updates. Accessibility and screen capture remain subject
+to the installed copy's system permissions.

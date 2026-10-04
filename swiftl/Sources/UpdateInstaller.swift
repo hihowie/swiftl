@@ -34,8 +34,19 @@ enum UpdateFiles {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    static func isProtectedLocation(_ destination: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        let path = destination.resolvingSymlinksInPath().standardizedFileURL.path
+        return ["Desktop", "Documents", "Downloads", "Library/Mobile Documents"].contains { folder in
+            let root = home.appendingPathComponent(folder).resolvingSymlinksInPath().standardizedFileURL.path
+            return path == root || path.hasPrefix(root + "/")
+        }
+    }
+
     static func prepare(archive: URL, expectedHash: String, version: String, destination: URL) throws -> PreparedUpdate {
         let fm = FileManager.default
+        guard !isProtectedLocation(destination) else {
+            throw UpdateInstallError(message: "Automatic updates cannot run from Desktop, Documents, Downloads, or iCloud Drive. Move SwifTL to Applications first, then retry.")
+        }
         let data = try Data(contentsOf: archive, options: .mappedIfSafe)
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         guard hash == expectedHash else { throw UpdateInstallError(message: "The downloaded update checksum does not match GitHub. Try downloading again.") }
