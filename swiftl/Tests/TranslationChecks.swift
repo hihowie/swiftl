@@ -134,6 +134,21 @@ final class TranslationProtocol: URLProtocol {
         let payload = try! JSONSerialization.jsonObject(with: body!) as! [String: Any]
         check(deepLRequest.url?.host == "api-free.deepl.com" && payload["text"] as? [String] == [original], "DeepL JSON preserves special characters")
         check(model.translatedText == "DeepL result", "existing DeepL provider used")
+        let savedInput = model.inputText
+        let savedTranslation = model.translatedText
+        let quick = model.makeQuickTranslationModel()
+        check(quick.sourceLanguage == model.sourceLanguage && quick.targetLanguage == model.targetLanguage && quick.isDeepLEnabled && quick.deepLApiKey == model.deepLApiKey, "quick translation snapshots languages and provider")
+        quick.inputText = "Selected text"
+        TranslationProtocol.responseData = Data(#"{"translations":[{"text":"Quick result"}]}"#.utf8)
+        quick.translateInput(); wait(quick)
+        check(quick.translatedText == "Quick result" && model.inputText == savedInput && model.translatedText == savedTranslation, "quick translation leaves main-window text intact")
+        quick.sourceLanguage = Language(name: "Japanese", code: "ja")
+        check(prefs.string(forKey: "DefaultSourceLanguageCode") == model.sourceLanguage.code, "quick model does not overwrite saved language preferences")
+        quick.isDeepLEnabled = false
+        TranslationProtocol.failure = URLError(.notConnectedToInternet)
+        quick.translateInput(); wait(quick)
+        check(quick.errorMessage != nil && model.errorMessage == nil && model.translatedText == savedTranslation, "quick translation failure is isolated from main window")
+        TranslationProtocol.failure = nil
         if CommandLine.arguments.contains("--live") {
             let live = TranslatorViewModel(preferences: prefs)
             live.isDeepLEnabled = false

@@ -53,7 +53,7 @@ bash swiftl/scripts/package.sh
 ```
 
 The script creates a universal Release app (Apple Silicon and Intel), applies
-an ad-hoc signature with the app sandbox entitlements, and creates a verified
+an ad-hoc signature, and creates a verified
 `SwifTL.dmg` with an Applications shortcut. Outputs default to `../dist`; pass
 an output directory as the first argument to override it. Xcode is required.
 This build is for local testing and is not notarized for public distribution.
@@ -135,3 +135,48 @@ a real typed English-to-Chinese translation with Command+Return passed.
 Window reopening preserved both input and translation. Screenshot selection
 cancellation returned to the main window; full OCR capture still requires the
 user’s Screen Recording permission and was not verified in this update.
+
+## Quick selection translation
+
+Keep SwifTL running, select text in another app, and press **Option+Shift+T**.
+The app reads the selected text through Accessibility, falling back to a
+simulated copy when necessary. It attempts to restore all existing clipboard
+representations after that copy; if focus changes, it abandons capture.
+No translation is triggered just by selecting text. An optional **Show a button
+after selecting text** setting is off by default. When enabled, an Accessibility
+selection read after mouse release can display a small button near the pointer.
+The selection is sent for translation only when that button is clicked. This
+mode does not simulate copy and works only where the source exposes selection.
+
+- Choose another selected-text shortcut in Settings: Option+Shift+T,
+  Control+Option+T, or Command+Shift+Y. Registration conflicts are shown there.
+- Enable SwifTL in **System Settings → Privacy & Security → Accessibility**
+  for direct selection reading and automatic copy. The app never grants this
+  permission itself and does not request it at startup.
+- Without Accessibility access, copy text yourself and press
+  **Command+Option+Shift+T**, or click the clipboard button in the main window.
+- A small nonactivating result window appears near the selection, or near the
+  pointer if the source app does not provide selection bounds. It uses the main
+  window's current languages and translation provider.
+- Copy the translation, read it aloud using macOS voices, or pin the window.
+  An unpinned result closes on an outside click; Escape and Close dismiss it.
+  Pinning keeps it visible until explicitly dismissed.
+- **Open in main window** transfers the original text, translation, and languages
+  after the request finishes. Quick requests leave main-window edits untouched.
+- A **Translate with SwifTL** system service is declared for selected text.
+  Install the app in Applications and enable it under Keyboard → Keyboard
+  Shortcuts → Services if it does not appear in the source app's Services menu.
+
+Cross-app Accessibility is incompatible with App Sandbox, so this direct-download
+build now runs without the sandbox. Existing sandboxed language preferences are
+migrated if the new preferences have no saved language pair. Screenshot permission
+remains separate. Ad-hoc rebuilds may require reauthorizing Accessibility; a stable
+Developer ID signature is needed for smoother permission handling across updates.
+
+Verification: universal build, app signature, DMG checksum, model regression checks,
+real clipboard translation, pin/copy controls, speech start/stop controls, and transfer
+to the main window were checked. Direct cross-app AX capture, the optional selection button, automatic copy fallback,
+and system-service discovery were not fully verified because Accessibility was not
+granted and the test app was run outside Applications. Global hotkeys registered
+without a conflict, but the UI automation did not trigger Carbon hotkeys; physical
+keyboard triggering remains to be checked. Actual audio output was not measured.

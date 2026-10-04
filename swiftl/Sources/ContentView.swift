@@ -14,6 +14,11 @@ struct ContentView: View {
             HStack {
                 Text("SwifTL").font(.title2.weight(.semibold))
                 Spacer()
+                Button { SelectionTranslation.shared.translateClipboard() } label: {
+                    Image(systemName: "clipboard")
+                }
+                .help("Translate clipboard (⌘⌥⇧T)")
+                .accessibilityLabel("Translate clipboard")
                 Button { showingSettings = true } label: {
                     Image(systemName: "gearshape")
                 }

@@ -22,7 +22,23 @@ class MainWindow: NSWindow {}
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var mainWindow: MainWindow?
-    let viewModel = TranslatorViewModel()
+    let viewModel: TranslatorViewModel = {
+        // Carry over language choices when upgrading from the sandboxed build.
+        let defaults = UserDefaults.standard
+        let keys = ["DefaultSourceLanguageCode", "DefaultTargetLanguageCode"]
+        if keys.allSatisfy({ defaults.string(forKey: $0) == nil }),
+           let identifier = Bundle.main.bundleIdentifier {
+            let path = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Containers/\(identifier)/Data/Library/Preferences/\(identifier).plist")
+            if let data = try? Data(contentsOf: path),
+               let previous = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+               let source = previous[keys[0]] as? String, let target = previous[keys[1]] as? String {
+                defaults.set(source, forKey: keys[0])
+                defaults.set(target, forKey: keys[1])
+            }
+        }
+        return TranslatorViewModel()
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -41,10 +57,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrameAutosaveName("SwifTLMainWindow")
         mainWindow = window
         showMainWindow()
+        SelectionTranslation.shared.start(appDelegate: self)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        showMainWindow()
+        if !flag || mainWindow?.isVisible != true { showMainWindow() }
         return true
     }
 

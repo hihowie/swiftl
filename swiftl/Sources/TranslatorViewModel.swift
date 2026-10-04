@@ -54,7 +54,7 @@ class TranslatorViewModel: ObservableObject {
     private let preferences: UserDefaults
     private var shouldSaveLanguagePreferences = false
 
-    init(session: URLSession = .shared, preferences: UserDefaults = .standard) {
+    init(session: URLSession = .shared, preferences: UserDefaults = .standard, persistLanguageChanges: Bool = true) {
         self.session = session
         self.preferences = preferences
         // Default to Japanese and English, but will be overridden by saved preferences if they exist
@@ -69,7 +69,7 @@ class TranslatorViewModel: ObservableObject {
         
         // Load saved language preferences
         loadLanguagePreferences()
-        shouldSaveLanguagePreferences = true
+        shouldSaveLanguagePreferences = persistLanguageChanges
     }
     
     // Save DeepL API key to Keychain
@@ -160,6 +160,15 @@ class TranslatorViewModel: ObservableObject {
         }
     }
     
+    func makeQuickTranslationModel() -> TranslatorViewModel {
+        let quick = TranslatorViewModel(session: session, preferences: preferences, persistLanguageChanges: false)
+        quick.sourceLanguage = sourceLanguage
+        quick.targetLanguage = targetLanguage
+        quick.deepLApiKey = deepLApiKey
+        quick.isDeepLEnabled = isDeepLEnabled
+        return quick
+    }
+
     func swapLanguages() {
         guard !isTranslating, !isSelectingArea else { return }
         let previousSource = sourceLanguage

@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.presentationMode) var presentationMode
     @ObservedObject var viewModel: TranslatorViewModel
+    @ObservedObject private var selection = SelectionTranslation.shared
     @State private var apiKeyInput: String = ""
     @State private var isEditing: Bool = false
     var body: some View {
@@ -85,8 +86,21 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
+            Divider()
+            Text("Quick Translation").font(.subheadline.weight(.medium))
+            Picker("Selected text shortcut", selection: $selection.shortcutChoice) {
+                ForEach(SelectionTranslation.shortcutLabels.indices, id: \.self) { index in
+                    Text(SelectionTranslation.shortcutLabels[index]).tag(index)
+                }
+            }
+            Text("Select text in another app, then press the shortcut. Copy text and press ⌘⌥⇧T for clipboard translation.")
+                .font(.caption).foregroundColor(.secondary)
+            Toggle("Show a button after selecting text", isOn: $selection.showSelectionButton)
+            Text("Requires Accessibility and an app that exposes selected text. Click the button to translate.")
+                .font(.caption).foregroundColor(.secondary)
+            Button("Enable Accessibility…") { selection.requestAccessibility() }
+            if let error = selection.shortcutError { Text(error).font(.caption).foregroundColor(.red) }
             Spacer()
-            
             HStack {
                 Button("Close") {
                     presentationMode.wrappedValue.dismiss()
@@ -98,7 +112,7 @@ struct SettingsView: View {
             .padding(.bottom, 8)
         }
         .padding()
-        .frame(width: 450, height: 340)
+        .frame(width: 450, height: 600)
         .onAppear {
             apiKeyInput = viewModel.deepLApiKey
         }
