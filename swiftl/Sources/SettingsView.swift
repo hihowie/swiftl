@@ -65,7 +65,8 @@ struct SettingsView: View {
                         Spacer()
                         
                         Button("Edit") {
-                            apiKeyInput = viewModel.deepLApiKey
+                            selection.refreshAccessibility()
+            apiKeyInput = viewModel.deepLApiKey
                             isEditing = true
                         }
                         
@@ -98,6 +99,11 @@ struct SettingsView: View {
             Toggle("Show a button after selecting text", isOn: $selection.showSelectionButton)
             Text("Requires Accessibility and an app that exposes selected text. Click the button to translate.")
                 .font(.caption).foregroundColor(.secondary)
+            Text(selection.accessibilityGranted ? "Accessibility: Enabled" : "Accessibility: Not enabled for this copy of SwifTL")
+                .font(.caption).foregroundColor(selection.accessibilityGranted ? .green : .red)
+            if selection.showSelectionButton {
+                Text(selection.selectionStatus).font(.caption).foregroundColor(.secondary)
+            }
             Button("Enable Accessibility…") { selection.requestAccessibility() }
             if let error = selection.shortcutError { Text(error).font(.caption).foregroundColor(.red) }
             Spacer()
@@ -112,8 +118,10 @@ struct SettingsView: View {
             .padding(.bottom, 8)
         }
         .padding()
-        .frame(width: 450, height: 600)
+        .frame(width: 450, height: 660)
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in selection.refreshAccessibility() }
         .onAppear {
+            selection.refreshAccessibility()
             apiKeyInput = viewModel.deepLApiKey
         }
     }

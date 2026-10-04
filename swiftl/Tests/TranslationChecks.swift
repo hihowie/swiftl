@@ -43,7 +43,22 @@ final class TranslationProtocol: URLProtocol {
         }
         check(!model.isTranslating, "request completed")
     }
+    static func checkSelectionSearch() {
+        func search(_ selections: [Int: String], secure: Set<Int> = [], children: [Int: [Int]] = [0: [1], 1: [2]], parents: [Int: Int] = [2: 1, 1: 0], webAreas: Set<Int> = [1]) -> SelectionSearch<Int> {
+            SelectionSearch(selectedText: { selections[$0] }, parent: { parents[$0] }, children: { children[$0] ?? [] }, isWebArea: { webAreas.contains($0) }, isSecure: { secure.contains($0) }, canContinue: { true })
+        }
+        check(search([1: "Across two paragraphs"]).find(focused: 2, hit: nil, window: 0)?.1 == "Across two paragraphs", "Chrome group focus resolves selection on parent web area")
+        check(search([1: "Complete selection", 2: "fragment"]).find(focused: nil, hit: 2, window: 0)?.1 == "Complete selection", "pointer hit prefers complete web-area selection")
+        check(search([1: "Page selection"]).find(focused: 3, hit: nil, window: 0)?.1 == "Page selection", "active-window web area resolves missing focus selection")
+        check(search([2: "secret"], secure: [2]).find(focused: 2, hit: nil, window: 0) == nil, "secure focused field blocks all selection search")
+        check(search([1: "   \n"]).find(focused: 2, hit: nil, window: 0) == nil, "whitespace selection does not trigger a button")
+        check(search([3: "Unrelated toolbar selection"], children: [0: [3]], webAreas: []).find(focused: nil, hit: nil, window: 0) == nil, "window scan does not use unrelated toolbar selections")
+        var visits = 0
+        let bounded = SelectionSearch<Int>(selectedText: { _ in nil }, parent: { _ in nil }, children: { node in visits += 1; return [node] }, isWebArea: { _ in true }, isSecure: { _ in false }, canContinue: { true }, limit: 12)
+        check(bounded.find(focused: nil, hit: nil, window: 0) == nil && visits <= 12, "cyclic accessibility children are bounded")
+    }
     static func main() {
+        checkSelectionSearch()
         let suite = "SwifTL.Checks.\(UUID().uuidString)"
         let prefs = UserDefaults(suiteName: suite)!
         defer { prefs.removePersistentDomain(forName: suite) }

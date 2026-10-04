@@ -19,6 +19,10 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
             configureSelectionButton()
         }
     }
+    @Published private(set) var accessibilityGranted = AXIsProcessTrusted()
+    @Published private(set) var selectionStatus = "Select text in another app to show the button."
+    private let selectionQueue = DispatchQueue(label: "SwifTL.selection", qos: .userInitiated)
+    private var detectionGeneration = UUID()
     @Published var shortcutError: String?
     @Published var isPinned = false
     @Published var isSpeaking = false
@@ -98,9 +102,14 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
         selectionMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp, .keyDown]) { [weak self] event in
             guard let self = self else { return }
             self.hideSelectionButton()
-            guard event.type == .leftMouseUp, AXIsProcessTrusted(), self.panel?.isVisible != true,
+            guard event.type == .leftMouseUp, self.panel?.isVisible != true,
                   let target = NSWorkspace.shared.frontmostApplication,
                   target.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            self.refreshAccessibility()
+            guard self.accessibilityGranted else {
+                self.selectionStatus = "Accessibility is not enabled for this running copy of SwifTL."
+                return
+            }
             let work = DispatchWorkItem { [weak self] in
                 guard let self = self, self.showSelectionButton,
                       NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier else { return }
@@ -118,22 +127,50 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
         }
     }
 
+    func refreshAccessibility() { accessibilityGranted = AXIsProcessTrusted() }
+
+    private func readSelection(in target: NSRunningApplication, completion: @escaping (SelectedTextResult?, Bool) -> Void) {
+        let point = NSEvent.mouseLocation
+        let top = NSScreen.screens.first?.frame.maxY ?? 0
+        let browser = target.bundleIdentifier?.hasPrefix("com.google.Chrome") == true
+            || target.bundleIdentifier == "com.microsoft.edgemac"
+            || target.bundleIdentifier == "com.brave.Browser"
+        selectionQueue.async {
+            let reader = SelectedTextReader()
+            let result = reader.read(processID: target.processIdentifier, browser: browser, mouse: CGPoint(x: point.x, y: top - point.y))
+            let secure = reader.encounteredSecureField
+            if result == nil, !secure, browser {
+                self.selectionQueue.asyncAfter(deadline: .now() + 0.2) {
+                    let retry = SelectedTextReader()
+                    let result = retry.read(processID: target.processIdentifier, browser: browser, mouse: CGPoint(x: point.x, y: top - point.y))
+                    let secure = retry.encounteredSecureField
+                    DispatchQueue.main.async { completion(result, secure) }
+                }
+            } else {
+                DispatchQueue.main.async { completion(result, secure) }
+            }
+        }
+    }
+
     private func detectSelection(in target: NSRunningApplication) {
-        let application = AXUIElementCreateApplication(target.processIdentifier)
-        AXUIElementSetMessagingTimeout(application, 0.3)
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(application, kAXFocusedUIElementAttribute as CFString, &value) == .success,
-              let value = value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return }
-        let focused = value as! AXUIElement
-        AXUIElementSetMessagingTimeout(focused, 0.3)
-        var role: CFTypeRef?
-        _ = AXUIElementCopyAttributeValue(focused, kAXSubroleAttribute as CFString, &role)
-        guard role as? String != kAXSecureTextFieldSubrole else { return }
-        var textValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(focused, kAXSelectedTextAttribute as CFString, &textValue) == .success,
-              let text = textValue as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        detectedText = text
-        detectedAnchor = selectionBounds(focused)
+        let generation = detectionGeneration
+        readSelection(in: target) { [weak self] result, secure in
+            guard let self = self, self.showSelectionButton, self.detectionGeneration == generation,
+                  NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier else { return }
+            guard !secure else { self.selectionStatus = "Password fields are skipped."; return }
+            guard let result = result else {
+                self.selectionStatus = "Could not read selected text from \(target.localizedName ?? "this app"). Try the selection shortcut or copy text."
+                return
+            }
+            self.selectionStatus = "Selected text found in \(target.localizedName ?? "this app")."
+            self.detectedText = result.text
+            let top = NSScreen.screens.first?.frame.maxY ?? 0
+            self.detectedAnchor = result.bounds.map { NSRect(x: $0.minX, y: top - $0.maxY, width: $0.width, height: $0.height) }
+            self.showDetectedButton()
+        }
+    }
+
+    private func showDetectedButton() {
         if indicator == nil {
             let window = SelectionPanel(contentRect: NSRect(x: 0, y: 0, width: 36, height: 32), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             window.level = .floating
@@ -160,6 +197,7 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
     }
 
     private func hideSelectionButton() {
+        detectionGeneration = UUID()
         selectionWork?.cancel()
         selectionWork = nil
         indicator?.orderOut(nil)
@@ -189,45 +227,23 @@ final class SelectionTranslation: NSObject, ObservableObject, AVSpeechSynthesize
         }
         let target = NSWorkspace.shared.frontmostApplication
         guard let target = target else { return }
-        let application = AXUIElementCreateApplication(target.processIdentifier)
-        AXUIElementSetMessagingTimeout(application, 0.3)
-        var focusedValue: CFTypeRef?
-        if AXUIElementCopyAttributeValue(application, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
-           let focusedValue = focusedValue, CFGetTypeID(focusedValue) == AXUIElementGetTypeID() {
-            let focused = focusedValue as! AXUIElement
-            AXUIElementSetMessagingTimeout(focused, 0.3)
-            var role: CFTypeRef?
-            _ = AXUIElementCopyAttributeValue(focused, kAXSubroleAttribute as CFString, &role)
-            if role as? String == kAXSecureTextFieldSubrole {
-                show(text: nil, error: "Password fields cannot be translated.")
-                return
-            }
-            var value: CFTypeRef?
-            if AXUIElementCopyAttributeValue(focused, kAXSelectedTextAttribute as CFString, &value) == .success,
-               let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                show(text: text, anchor: selectionBounds(focused))
-                return
+        captureInProgress = true
+        readSelection(in: target) { [weak self] result, secure in
+            guard let self = self else { return }
+            self.captureInProgress = false
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier else { return }
+            if secure {
+                self.show(text: nil, error: "Password fields cannot be translated.")
+            } else if let result = result {
+                let top = NSScreen.screens.first?.frame.maxY ?? 0
+                let anchor = result.bounds.map { NSRect(x: $0.minX, y: top - $0.maxY, width: $0.width, height: $0.height) }
+                self.show(text: result.text, anchor: anchor)
+            } else if target.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+                self.show(text: nil, error: "Select text in another app and press \(self.shortcutLabel), or copy it and press ⌘⌥⇧T.")
+            } else {
+                self.copySelection(from: target)
             }
         }
-        // A focused SwifTL control may be a button rather than the source editor.
-        guard target.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
-            show(text: nil, error: "Select text in another app and press \(shortcutLabel), or copy it and press ⌘⌥⇧T.")
-            return
-        }
-        copySelection(from: target)
-    }
-
-    private func selectionBounds(_ element: AXUIElement) -> NSRect? {
-        var range: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &range) == .success,
-              let range = range else { return nil }
-        var bounds: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(element, kAXBoundsForRangeParameterizedAttribute as CFString, range, &bounds) == .success,
-              let bounds = bounds, CFGetTypeID(bounds) == AXValueGetTypeID() else { return nil }
-        var rect = CGRect.zero
-        guard AXValueGetValue(bounds as! AXValue, .cgRect, &rect), rect.width > 0, rect.height > 0 else { return nil }
-        let top = NSScreen.screens.first?.frame.maxY ?? 0
-        return NSRect(x: rect.minX, y: top - rect.maxY, width: rect.width, height: rect.height)
     }
 
     private func copySelection(from target: NSRunningApplication) {

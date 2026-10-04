@@ -181,3 +181,30 @@ and system-service discovery were not fully verified because Accessibility was n
 granted and the test app was run outside Applications. Global hotkeys registered
 without a conflict, but the UI automation did not trigger Carbon hotkeys; physical
 keyboard triggering remains to be checked. Actual audio output was not measured.
+
+## Chrome selection compatibility
+
+The selection reader enables Chromium's accessibility tree and looks for selection
+on the focused element, its parents, the pointer's enclosing web area, and web
+areas in the active window. It also supports opaque browser text-marker ranges.
+It reads selected text only, never a control's whole value, skips secure fields,
+and bounds tree traversal and AX request time. Reads run off the UI thread;
+mouse or application changes discard outdated automatic-button results.
+
+Settings now show **Accessibility: Enabled** or **Not enabled for this copy of
+SwifTL**, plus the last automatic-button capture status. If macOS shows an enabled
+SwifTL entry but the app reports no permission, remove that entry and add the
+currently running app again. Ad-hoc signatures change with a rebuild, so an older
+copy's authorization may not apply. Keep one installed copy in Applications.
+
+For Chrome: enable **Show a button after selecting text**, confirm **Accessibility:
+Enabled**, close an existing quick result, then drag across ordinary webpage text
+and release the mouse. The button should appear near the pointer. Selections in
+SwifTL itself do not trigger it. For images or a webpage that exposes no selected
+text, use Screenshot or copy text and invoke clipboard translation.
+
+Tests cover browser group focus, complete web-area selection across fragments,
+missing focus, secure fields, whitespace, unrelated toolbar selection, and cyclic
+trees. Local universal build, signature, DMG checksum, and translation checks passed.
+A new Chrome test page was prepared; live selection detection is pending effective
+Accessibility permission for the rebuilt app.
