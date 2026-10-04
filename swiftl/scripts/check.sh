@@ -8,3 +8,7 @@ xcrun swiftc -target "$(uname -m)-apple-macosx13.0" "$repo_dir/swiftl/Sources/Tr
   "$repo_dir/swiftl/Sources/SelectedTextReader.swift" \
   "$repo_dir/swiftl/Tests/TranslationChecks.swift" -o "$check_dir/checks"
 "$check_dir/checks" "$@"
+xcrun swiftc -target "$(uname -m)-apple-macosx13.0" "$repo_dir/swiftl/Sources/UpdateChecker.swift" \
+  "$repo_dir/swiftl/Sources/UpdateInstaller.swift" \
+  "$repo_dir/swiftl/Tests/UpdateChecks.swift" -o "$check_dir/update-checks"
+"$check_dir/update-checks" "$@"

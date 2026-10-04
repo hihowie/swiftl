@@ -51,7 +51,7 @@ jobs:
               output.write(f'APP_VERSION={version}\nAPP_BUILD_NUMBER={os.environ["GITHUB_RUN_NUMBER"]}\nASSET_LABEL={label}\nIS_PRERELEASE={str(prerelease).lower()}\n')
           PY
 
-      - name: Check translation behavior
+      - name: Check translation and update behavior
         run: bash swiftl/scripts/check.sh
 
       - name: Build universal app and DMG
@@ -87,6 +87,8 @@ jobs:
           Download the DMG and drag SwifTL into Applications, or use the ZIP archive.
           This build is ad-hoc signed and is not Apple-notarized. macOS may require approval before opening it.
           Screenshot translation requires Screen Recording permission. Text input does not.
+          Use SwifTL → Check for Updates to download, install, and restart with future stable releases.
+          Automatic updates use the ZIP with its GitHub SHA-256 digest; the DMG is a manual fallback.
           EOF
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "$OUTPUT_DIR"/*.dmg "$OUTPUT_DIR"/*.zip "$OUTPUT_DIR/SHA256SUMS.txt" --clobber

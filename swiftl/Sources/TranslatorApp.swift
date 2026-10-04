@@ -10,6 +10,9 @@ struct TranslatorApp: App {
             SettingsView(viewModel: appDelegate.viewModel)
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { UpdateWindowController.shared.checkForUpdates() }
+            }
             CommandGroup(after: .windowArrangement) {
                 Button("Show SwifTL") { appDelegate.showMainWindow() }
                     .keyboardShortcut("1", modifiers: .command)
@@ -58,6 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindow = window
         showMainWindow()
         SelectionTranslation.shared.start(appDelegate: self)
+        UpdateInstaller.shared.restoreStatus()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

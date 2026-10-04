@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A00700000000000000000001 /* UpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00700000000000000000002 /* UpdateInstaller.swift */; };
+		A00600000000000000000001 /* UpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00600000000000000000002 /* UpdateView.swift */; };
+		A00500000000000000000001 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00500000000000000000002 /* UpdateChecker.swift */; };
 		A00400000000000000000001 /* TranslationResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00400000000000000000002 /* TranslationResultView.swift */; };
 		A00300000000000000000001 /* TranslationResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00300000000000000000002 /* TranslationResult.swift */; };
 		A00200000000000000000001 /* SelectedTextReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00200000000000000000002 /* SelectedTextReader.swift */; };
@@ -34,6 +37,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A00700000000000000000002 /* UpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstaller.swift; sourceTree = "<group>"; };
+		A00600000000000000000002 /* UpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateView.swift; sourceTree = "<group>"; };
+		A00500000000000000000002 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		A00400000000000000000002 /* TranslationResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationResultView.swift; sourceTree = "<group>"; };
 		A00300000000000000000002 /* TranslationResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationResult.swift; sourceTree = "<group>"; };
 		A00200000000000000000002 /* SelectedTextReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedTextReader.swift; sourceTree = "<group>"; };
@@ -85,6 +91,9 @@
 				272E15972D75FC1500DCCFD7 /* TranslatorApp.swift */,
 				A00100000000000000000002 /* SelectionTranslation.swift */,
 				A00200000000000000000002 /* SelectedTextReader.swift */,
+				A00700000000000000000002 /* UpdateInstaller.swift */,
+				A00600000000000000000002 /* UpdateView.swift */,
+				A00500000000000000000002 /* UpdateChecker.swift */,
 				A00400000000000000000002 /* TranslationResultView.swift */,
 				A00300000000000000000002 /* TranslationResult.swift */,
 				1231423B2B9590D9009DAEA7 /* ContentView.swift */,
@@ -182,6 +191,9 @@
 				272E15982D75FC1500DCCFD7 /* TranslatorApp.swift in Sources */,
 				A00100000000000000000001 /* SelectionTranslation.swift in Sources */,
 				A00200000000000000000001 /* SelectedTextReader.swift in Sources */,
+				A00700000000000000000001 /* UpdateInstaller.swift in Sources */,
+				A00600000000000000000001 /* UpdateView.swift in Sources */,
+				A00500000000000000000001 /* UpdateChecker.swift in Sources */,
 				A00400000000000000000001 /* TranslationResultView.swift in Sources */,
 				A00300000000000000000001 /* TranslationResult.swift in Sources */,
 				1231424B2B95913A009DAEA7 /* AreaSelectionWindow.swift in Sources */,
@@ -333,7 +345,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.swiftl;
 				PRODUCT_NAME = SwifTL;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -362,7 +374,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.swiftl;
 				PRODUCT_NAME = SwifTL;
 				SWIFT_EMIT_LOC_STRINGS = YES;

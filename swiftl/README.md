@@ -17,6 +17,7 @@ A native macOS window app for typed or pasted text translation and screenshot OC
 - English single words show local Dictionary definitions and system pronunciation
 - Translate text between multiple languages
 - Language selections are remembered automatically; use the button between From and To to swap them
+- Check GitHub Releases and install verified updates inside the app
 - Simple, lightweight, and intuitive interface
 
 ## Requirements
@@ -279,3 +280,34 @@ third-party dictionary service, or text history is added.
   UI transfer also remain unverified (the UI tool kept targeting the main window);
   the shared result model and transfer were checked automatically. Reauthorize the
   installed app copy for Accessibility and Screen Recording when required.
+
+## In-app GitHub updates
+
+Use **SwifTL → Check for Updates…** in the app menu, or the **Updates** section in
+Settings. SwifTL checks the public `hihowie/swiftl` latest-release endpoint without
+a login or token. Only stable releases with a newer numeric version are offered;
+manual Actions artifacts and prereleases are excluded. Nothing is downloaded until
+you click **Install and Restart**.
+
+The app downloads the release's universal ZIP, verifies the SHA-256 digest provided
+by GitHub, validates archive paths, bundle identity, version, and code signature,
+then prepares the new app beside the running copy. A separate helper waits for
+SwifTL to quit, swaps in the new copy, and reopens it. The previous copy remains as
+a hidden `.SwifTL-backup-*.app` beside the installed app. If the replacement or
+reopen command fails, the helper attempts to restore the previous copy. An app crash
+after macOS accepts the reopen command cannot be detected by this helper.
+
+Install SwifTL in a writable Applications folder first. Automatic replacement is
+unavailable from a mounted DMG, App Translocation, or a read-only app folder.
+**Download installer** and **View release** provide manual fallbacks; releases
+without a ZIP digest support manual installation only. Settings and Keychain data
+are kept; current input/results are cleared by the restart. Ad-hoc signing means
+macOS may require Accessibility or Screen Recording authorization again after an
+update. Package hash verification does not provide Developer ID notarization.
+
+Updater checks cover numeric versions, duplicate checks, missing/draft/prerelease
+responses, unavailable networks and retry, invalid URLs/digests, signed ZIP
+validation, corrupted signatures, symbolic links, replacement, backup, and rollback.
+The installer tests use disposable app copies and do not replace the running app.
+`check.sh --live` additionally checks the published stable release and downloads,
+verifies, and installs its real ZIP in a disposable copy.
